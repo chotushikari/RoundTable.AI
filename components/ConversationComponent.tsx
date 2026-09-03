@@ -427,7 +427,7 @@ export default function ConversationComponent({
   // messageList stays empty and the first interrupted turn is never shown.
   const messageList = useMemo(() => getMessageList(transcript), [transcript]);
 
-  const lastLoggedTurnRef = useRef<string | null>(null);
+  const lastLoggedTurnRef = useRef<number | null>(null);
 
   // Watch for new completed messages to log them
   useEffect(() => {
@@ -435,7 +435,7 @@ export default function ConversationComponent({
     const latestMessage = messageList[messageList.length - 1];
     
     if (latestMessage.turn_id !== lastLoggedTurnRef.current) {
-      logEvent(latestMessage.status === 'interrupted' ? 'INTERRUPTED' : 'TRANSCRIPT_FINAL', { 
+      logEvent(String(latestMessage.status) === 'interrupted' ? 'INTERRUPTED' : 'TRANSCRIPT_FINAL', { 
         turn_id: latestMessage.turn_id,
         uid: latestMessage.uid,
         text: latestMessage.text,

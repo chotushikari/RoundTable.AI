@@ -9,9 +9,6 @@ export async function POST(request: Request) {
     console.log('\n[StructuredEvent]', JSON.stringify(data, null, 2));
     
     // In Sprint 02, this is where we will route events to the Candidate State Orchestrator
-    if (data.type === 'SESSION_STARTED' && data.agentUID) {
-      getOrCreateSession(data.agentUID, data.channelName || 'default');
-    }
 
     if (data.type === 'TRANSCRIPT_FINAL' && data.message) {
       const isUser = data.message.uid === '0' || data.message.uid === 0; // Depends on how toolkit remapped it. Wait, ConversationComponent normalizes it to the RTC local uid.
@@ -63,9 +60,17 @@ async function triggerAgentUpdate(agentUid: string, restAgentId: string, action:
   
   try {
     await client.agents.update({
-      agent_id: restAgentId,
+      appid: appId,
+      agentId: restAgentId,
       properties: {
-        instructions: newPrompt,
+        llm: {
+          system_messages: [
+            {
+              role: 'system',
+              content: newPrompt
+            }
+          ]
+        }
       }
     });
     console.log('[Agent Update Success]');
