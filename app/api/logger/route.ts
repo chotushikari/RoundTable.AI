@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getOrCreateSession, processTranscriptTurn, NextInterviewAction } from '@/lib/orchestrator';
+import { processTranscriptTurn, NextInterviewAction } from '@/lib/orchestrator';
 import { AgoraClient, Area } from 'agora-agents';
 
 export async function POST(request: Request) {
@@ -18,16 +18,21 @@ export async function POST(request: Request) {
       // We'll just assume if it's not the agentUID, it's the user.
       // But we don't pass agentUID here easily unless we include it in the payload. Let's assume the client sends it.
       
-      const agentUID = data.agentUID || 'default'; // Need to update frontend to send agentUID
-      getOrCreateSession(agentUID, 'default');
-      
+      const agentUID = data.agentUID || 'default'; //      // If it's a final transcript, we run the Two-Speed deep path analysis
       const speaker = data.message.uid.toString() === agentUID.toString() ? 'agent' : 'user';
-      const action = await processTranscriptTurn(agentUID, data.message.text, speaker);
+      
+      const { newState, action } = await processTranscriptTurn({
+        agentUid: agentUID,
+        state: data.currentState || { technical: 0.1, product: 0.1, systemDesign: 0.1, communication: 0.1, confidence: 0.1 },
+        recentTranscript: data.recentTranscript || []
+      }, speaker);
       
       if (action && data.restAgentId) {
         // Trigger agent update!
         await triggerAgentUpdate(agentUID, data.restAgentId, action);
       }
+
+      return NextResponse.json({ success: true, newState });
     }
     
     return NextResponse.json({ success: true });

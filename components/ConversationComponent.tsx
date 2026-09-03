@@ -43,6 +43,13 @@ import {
   type QuickstartAgentMetric,
 } from './QuickstartPipelineMetrics';
 import { QuickstartTranscriptPanel } from './QuickstartTranscriptPanel';
+import type {
+  AgoraTokenData,
+  ClientStartRequest,
+  AgentResponse,
+  AgoraRenewalTokens,
+} from '../types/conversation';
+import type { CandidateState } from '../lib/orchestrator';
 import type { ConversationComponentProps } from '@/types/conversation';
 
 // Cap the displayed issues list to avoid overwhelming the UI during a cascade of errors.
@@ -99,11 +106,42 @@ export default function ConversationComponent({
   const agentUID = String(DEFAULT_AGENT_UID);
   const restAgentId = (agoraData as any).agentId;
 
+  const candidateStateRef = useRef<CandidateState>({
+    technical: 0.1,
+    product: 0.1,
+    systemDesign: 0.1,
+    communication: 0.1,
+    confidence: 0.1,
+  });
+
+  const recentTranscriptRef = useRef<string[]>([]);
+
   const logEvent = useCallback((type: string, payload: any) => {
+    // If it's a transcript update, track it
+    if (type === 'TRANSCRIPT_FINAL') {
+      recentTranscriptRef.current.push(`[${payload.message.uid.toString() === agentUID.toString() ? 'agent' : 'user'}] ${payload.message.text}`);
+      if (recentTranscriptRef.current.length > 10) recentTranscriptRef.current.shift();
+    }
+
     fetch('/api/logger', {
       method: 'POST',
-      body: JSON.stringify({ type, timestamp: Date.now(), agentUID, restAgentId, ...payload }),
-    }).catch(() => {});
+      body: JSON.stringify({ 
+        type, 
+        timestamp: Date.now(), 
+        agentUID, 
+        restAgentId,
+        currentState: candidateStateRef.current,
+        recentTranscript: recentTranscriptRef.current,
+        ...payload 
+      }),
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.newState) {
+        candidateStateRef.current = data.newState;
+      }
+    })
+    .catch(() => {});
   }, [agentUID, restAgentId]);
 
   const client = useRTCClient();

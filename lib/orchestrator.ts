@@ -12,45 +12,21 @@ export interface NextInterviewAction {
   objective: string;
 }
 
-interface Session {
+export interface SessionContext {
   agentUid: string;
-  channelName: string;
   state: CandidateState;
-  transcript: string[];
+  recentTranscript: string[]; // Pass the last 10 lines from the frontend
 }
 
-// In-memory store for Hackathon
-const sessions: Record<string, Session> = {};
-
-export function getOrCreateSession(agentUid: string, channelName: string): Session {
-  if (!sessions[agentUid]) {
-    sessions[agentUid] = {
-      agentUid,
-      channelName,
-      state: {
-        technical: 0.1,
-        product: 0.1,
-        systemDesign: 0.1,
-        communication: 0.1,
-        confidence: 0.1,
-      },
-      transcript: [],
-    };
-  }
-  return sessions[agentUid];
-}
-
-export async function processTranscriptTurn(agentUid: string, text: string, speaker: 'user' | 'agent') {
-  const session = sessions[agentUid];
-  if (!session) return null;
-
-  session.transcript.push(`[${speaker}] ${text}`);
-
+export async function processTranscriptTurn(
+  session: SessionContext,
+  speaker: 'user' | 'agent'
+): Promise<{ newState: CandidateState; action: NextInterviewAction | null }> {
   // Only process deep analysis on user turns
   if (speaker === 'user') {
     return await runRealLLMAnalysis(session);
   }
-  return null;
+  return { newState: session.state, action: null };
 }
 
 const SYSTEM_PROMPT = `
@@ -66,16 +42,17 @@ Scoring Rules (Technical AI Policy):
 You must output a JSON object containing the delta (-0.2 to +0.2) for each category, a short reasoning string, and optionally a nextAction if a role switch is recommended (e.g., if a category score crosses 0.7, you might recommend switching to another role to test a different skill).
 `;
 
-async function runRealLLMAnalysis(session: Session): Promise<NextInterviewAction | null> {
+async function runRealLLMAnalysis(
+  session: SessionContext
+): Promise<{ newState: CandidateState; action: NextInterviewAction | null }> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     console.error('[Orchestrator] Missing GEMINI_API_KEY');
-    return null;
+    return { newState: session.state, action: null };
   }
 
-  // Use the last 10 turns to give the LLM context of the recent conversation
-  const recentTranscript = session.transcript.slice(-10).join('\n');
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${apiKey}`;
+  const recentTranscript = session.recentTranscript.join('\n');
   
   const schema = {
     type: "OBJECT",
@@ -132,32 +109,35 @@ async function runRealLLMAnalysis(session: Session): Promise<NextInterviewAction
 
     if (!response.ok) {
       console.error('[Orchestrator] Gemini API error:', await response.text());
-      return null;
+      return { newState: session.state, action: null };
     }
 
     const data = await response.json();
     const resultText = data.candidates[0].content.parts[0].text;
     const object = JSON.parse(resultText);
 
-    // Apply the JSON deltas directly to the in-memory state vector
-    session.state.technical = Math.max(0, Math.min(1.0, session.state.technical + object.deltas.technical));
-    session.state.product = Math.max(0, Math.min(1.0, session.state.product + object.deltas.product));
-    session.state.systemDesign = Math.max(0, Math.min(1.0, session.state.systemDesign + object.deltas.systemDesign));
-    session.state.communication = Math.max(0, Math.min(1.0, session.state.communication + object.deltas.communication));
-    session.state.confidence = Math.max(0, Math.min(1.0, session.state.confidence + object.deltas.confidence));
+    // Apply the JSON deltas directly to the new state vector
+    const newState: CandidateState = {
+      technical: Math.max(0, Math.min(1.0, session.state.technical + object.deltas.technical)),
+      product: Math.max(0, Math.min(1.0, session.state.product + object.deltas.product)),
+      systemDesign: Math.max(0, Math.min(1.0, session.state.systemDesign + object.deltas.systemDesign)),
+      communication: Math.max(0, Math.min(1.0, session.state.communication + object.deltas.communication)),
+      confidence: Math.max(0, Math.min(1.0, session.state.confidence + object.deltas.confidence))
+    };
 
-    console.log(`\n[Orchestrator] Candidate State Updated for ${session.agentUid}:`, session.state);
+    console.log(`\n[Orchestrator] Candidate State Updated for ${session.agentUid}:`, newState);
     console.log(`[Orchestrator] Reasoning:`, object.reasoning);
 
+    let nextAction = null;
     if (object.nextAction && object.nextAction.role) {
       console.log(`[Orchestrator] Recommending role switch to ${object.nextAction.role}.`);
-      return object.nextAction as NextInterviewAction;
+      nextAction = object.nextAction as NextInterviewAction;
     }
 
-    return null;
+    return { newState, action: nextAction };
 
   } catch (error) {
     console.error('[Orchestrator] LLM Analysis failed:', error);
-    return null;
+    return { newState: session.state, action: null };
   }
 }
