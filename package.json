@@ -14,7 +14,7 @@
     "lint": "eslint .",
     "verify:api": "node --import tsx scripts/verify-api-contracts.ts",
     "typecheck": "tsc --noEmit",
-    "verify": "pnpm run doctor && pnpm run lint && pnpm run typecheck && pnpm run verify:api && pnpm run build"
+    "verify": "npm run doctor && npm run lint && npm run typecheck && npm run verify:api && npm run build"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.63",
