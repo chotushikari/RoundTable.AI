@@ -146,6 +146,9 @@ export default function ConversationComponent({
       if (data.newRole) {
         activeRoleRef.current = data.newRole;
       }
+      if (data.newModality) {
+        setActiveModality(data.newModality);
+      }
     })
     .catch(() => {});
   }, [agentUID, restAgentId]);
@@ -155,6 +158,7 @@ export default function ConversationComponent({
   const [isEnabled, setIsEnabled] = useState(true);
   const [isAgentConnected, setIsAgentConnected] = useState(false);
   const [isConnectionDetailsOpen, setIsConnectionDetailsOpen] = useState(false);
+  const [activeModality, setActiveModality] = useState<'voice' | 'code'>('voice');
 
   // Tracks granular RTC connection state for the status dot.
   // Agora states: DISCONNECTED | CONNECTING | CONNECTED | DISCONNECTING | RECONNECTING
@@ -548,6 +552,7 @@ export default function ConversationComponent({
 
   return (
     <QuickstartConversationLayout
+      activeModality={activeModality}
       statusPanel={
         <ConnectionStatusPanel
           connectionState={connectionState}

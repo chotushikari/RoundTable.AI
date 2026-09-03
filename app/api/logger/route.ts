@@ -30,7 +30,7 @@ export async function POST(request: Request) {
         await triggerAgentUpdate(agentUID, data.restAgentId, action);
       }
 
-      return NextResponse.json({ success: true, newState, newRole: action?.role || null });
+      return NextResponse.json({ success: true, newState, newRole: action?.role || null, newModality: action?.modality || null });
     }
     
     return NextResponse.json({ success: true });

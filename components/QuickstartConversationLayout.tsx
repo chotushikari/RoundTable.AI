@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
+import { CodeWorkspace } from './CodeWorkspace';
 
 type QuickstartConversationLayoutProps = {
   statusPanel: ReactNode;
@@ -11,6 +12,7 @@ type QuickstartConversationLayoutProps = {
   visualizer: ReactNode;
   controls: ReactNode;
   onEndConversation: () => void;
+  activeModality?: 'voice' | 'code';
 };
 
 export function QuickstartConversationLayout({
@@ -20,6 +22,7 @@ export function QuickstartConversationLayout({
   visualizer,
   controls,
   onEndConversation,
+  activeModality = 'voice',
 }: QuickstartConversationLayoutProps) {
   return (
     <div className="flex min-h-0 flex-1 flex-col text-left">
@@ -55,12 +58,14 @@ export function QuickstartConversationLayout({
         </div>
       </header>
 
-      <div className="flex min-h-0 w-full flex-1 flex-col gap-4 px-4 pb-4 pt-4 md:px-6 lg:flex-row lg:gap-0">
-        <aside className="order-2 h-64 min-h-0 w-full shrink-0 lg:order-1 lg:h-full lg:w-[26rem]">
+      <div className={`flex min-h-0 w-full flex-1 flex-col gap-4 px-4 pb-4 pt-4 md:px-6 lg:gap-0 ${activeModality === 'code' ? 'lg:flex-row' : 'lg:flex-row'}`}>
+        {/* Transcript Rail */}
+        <aside className="order-3 h-64 min-h-0 w-full shrink-0 lg:order-1 lg:h-full lg:w-[20rem]">
           {transcriptPanel}
         </aside>
 
-        <main className="order-1 flex min-h-0 flex-1 flex-col lg:order-2 lg:border-l lg:border-border/80 lg:pl-6">
+        {/* Visualizer (and potentially small controls) */}
+        <main className={`order-1 flex min-h-0 flex-1 flex-col lg:order-2 lg:border-l lg:border-border/80 lg:pl-6 ${activeModality === 'code' ? 'lg:w-[20rem] lg:flex-none' : ''}`}>
           <div className="flex min-h-0 flex-1 flex-col pb-2 pt-3 md:pb-6">
             <div className="flex min-h-0 flex-1 items-center justify-center">
               {visualizer}
@@ -68,6 +73,15 @@ export function QuickstartConversationLayout({
             <div className="shrink-0 pt-4">{controls}</div>
           </div>
         </main>
+
+        {/* Code Workspace */}
+        {activeModality === 'code' && (
+          <section className="order-2 flex min-h-0 flex-1 flex-col lg:order-3 lg:border-l lg:border-border/80 lg:pl-6">
+            <div className="flex h-full w-full py-3 md:pb-6">
+              <CodeWorkspace />
+            </div>
+          </section>
+        )}
       </div>
     </div>
   );

@@ -6,7 +6,7 @@
 *   [x] **Sprint 02:** Candidate State & Orchestrator
 *   [x] **Sprint 03:** Technical AI Policies
 *   [x] **Sprint 04:** Product & Hiring Manager Profiles
-*   [ ] **Sprint 05:** Code Workspace
+*   [x] **Sprint 05:** Code Workspace
 *   [ ] **Sprint 06:** Control Room UX
 
 ## Sprint 00: Audit & Baseline
@@ -37,3 +37,8 @@
 - Expanded the `SYSTEM_PROMPT` to score `product` (business impact, user empathy) and `manager` (communication, conflict resolution) metrics simultaneously.
 - Tracked the `activeRole` in the React frontend and dynamically updated the backend on each API route invocation.
 - Implemented logic where the Orchestrator engine analyzes the `activeRole` and score thresholds to automatically transition the agent into the next persona.
+
+## Sprint 05: Code Workspace (Multimodal UX)
+- Built the `CodeWorkspace` React component using `@monaco-editor/react` for a premium, syntax-highlighted IDE aesthetic.
+- Updated `ConversationComponent` to track `activeModality` (e.g., `'voice'` or `'code'`).
+- Redesigned `QuickstartConversationLayout` to dynamically shift into a split-screen layout when the agent transitions into code mode, keeping the voice connection alive while providing a coding environment.
