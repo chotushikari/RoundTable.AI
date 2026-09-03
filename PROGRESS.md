@@ -5,7 +5,7 @@
 *   [x] **Sprint 01:** Agora Vertical Slice (Next.js baseline, structured event logging)
 *   [x] **Sprint 02:** Candidate State & Orchestrator
 *   [x] **Sprint 03:** Technical AI Policies
-*   [ ] **Sprint 04:** Product & Hiring Manager Profiles
+*   [x] **Sprint 04:** Product & Hiring Manager Profiles
 *   [ ] **Sprint 05:** Code Workspace
 *   [ ] **Sprint 06:** Control Room UX
 
@@ -32,3 +32,8 @@
 - Replaced the mock LLM with a live connection to `gemini-3.8-flash` via the Google Generative Language REST API.
 - Engineered a strict `SYSTEM_PROMPT` to analyze candidate transcripts and extract nuanced JSON state updates (deltas).
 - Successfully verified that technical jargon triggers corresponding `technical` and `systemDesign` candidate state increments!
+
+## Sprint 04: Product & Hiring Manager Profiles
+- Expanded the `SYSTEM_PROMPT` to score `product` (business impact, user empathy) and `manager` (communication, conflict resolution) metrics simultaneously.
+- Tracked the `activeRole` in the React frontend and dynamically updated the backend on each API route invocation.
+- Implemented logic where the Orchestrator engine analyzes the `activeRole` and score thresholds to automatically transition the agent into the next persona.
