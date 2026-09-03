@@ -4,7 +4,7 @@
 *   [x] **Sprint 00:** Audit & Baseline
 *   [x] **Sprint 01:** Agora Vertical Slice (Next.js baseline, structured event logging)
 *   [x] **Sprint 02:** Candidate State & Orchestrator
-*   [ ] **Sprint 03:** Technical AI Policies
+*   [x] **Sprint 03:** Technical AI Policies
 *   [ ] **Sprint 04:** Product & Hiring Manager Profiles
 *   [ ] **Sprint 05:** Code Workspace
 *   [ ] **Sprint 06:** Control Room UX
@@ -27,3 +27,8 @@
 - Updated `ConversationComponent` to include the `restAgentId` in the telemetry.
 - Updated `/api/logger` to pass transcripts into the Orchestrator for deep analysis.
 - Implemented logic where the Orchestrator evaluates the state, emits a `NextInterviewAction`, and uses the Server SDK to securely `POST /update` the agent's system instructions mid-call without reconnecting.
+
+## Sprint 03: Technical AI Policies (Real LLM)
+- Replaced the mock LLM with a live connection to `gemini-3.8-flash` via the Google Generative Language REST API.
+- Engineered a strict `SYSTEM_PROMPT` to analyze candidate transcripts and extract nuanced JSON state updates (deltas).
+- Successfully verified that technical jargon triggers corresponding `technical` and `systemDesign` candidate state increments!
