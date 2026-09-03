@@ -96,12 +96,15 @@ export default function ConversationComponent({
   onTokenWillExpire,
   onEndConversation,
 }: ConversationComponentProps) {
+  const agentUID = String(DEFAULT_AGENT_UID);
+  const restAgentId = (agoraData as any).agentId;
+
   const logEvent = useCallback((type: string, payload: any) => {
     fetch('/api/logger', {
       method: 'POST',
-      body: JSON.stringify({ type, timestamp: Date.now(), ...payload }),
+      body: JSON.stringify({ type, timestamp: Date.now(), agentUID, restAgentId, ...payload }),
     }).catch(() => {});
-  }, []);
+  }, [agentUID, restAgentId]);
 
   const client = useRTCClient();
   const remoteUsers = useRemoteUsers();
@@ -112,7 +115,6 @@ export default function ConversationComponent({
   // Tracks granular RTC connection state for the status dot.
   // Agora states: DISCONNECTED | CONNECTING | CONNECTED | DISCONNECTING | RECONNECTING
   const [connectionState, setConnectionState] = useState<string>('CONNECTING');
-  const agentUID = String(DEFAULT_AGENT_UID);
   const [joinedUID, setJoinedUID] = useState<UID>(0);
 
   // Transcript + agent state — managed with AgoraVoiceAI (see effect below).
