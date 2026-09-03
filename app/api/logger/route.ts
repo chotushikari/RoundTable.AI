@@ -24,6 +24,7 @@ export async function POST(request: Request) {
       const { newState, action } = await processTranscriptTurn({
         agentUid: agentUID,
         state: data.currentState || { technical: 0.1, product: 0.1, systemDesign: 0.1, communication: 0.1, confidence: 0.1 },
+        activeRole: data.activeRole || 'technical',
         recentTranscript: data.recentTranscript || []
       }, speaker);
       
@@ -32,7 +33,7 @@ export async function POST(request: Request) {
         await triggerAgentUpdate(agentUID, data.restAgentId, action);
       }
 
-      return NextResponse.json({ success: true, newState });
+      return NextResponse.json({ success: true, newState, newRole: action?.role || null });
     }
     
     return NextResponse.json({ success: true });

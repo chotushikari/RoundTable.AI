@@ -113,6 +113,8 @@ export default function ConversationComponent({
     communication: 0.1,
     confidence: 0.1,
   });
+  
+  const activeRoleRef = useRef<'technical' | 'product' | 'manager'>('technical');
 
   const recentTranscriptRef = useRef<string[]>([]);
 
@@ -131,6 +133,7 @@ export default function ConversationComponent({
         agentUID, 
         restAgentId,
         currentState: candidateStateRef.current,
+        activeRole: activeRoleRef.current,
         recentTranscript: recentTranscriptRef.current,
         ...payload 
       }),
@@ -139,6 +142,9 @@ export default function ConversationComponent({
     .then(data => {
       if (data.newState) {
         candidateStateRef.current = data.newState;
+      }
+      if (data.newRole) {
+        activeRoleRef.current = data.newRole;
       }
     })
     .catch(() => {});

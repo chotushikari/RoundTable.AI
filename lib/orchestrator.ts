@@ -15,6 +15,7 @@ export interface NextInterviewAction {
 export interface SessionContext {
   agentUid: string;
   state: CandidateState;
+  activeRole: 'technical' | 'product' | 'manager';
   recentTranscript: string[]; // Pass the last 10 lines from the frontend
 }
 
@@ -30,16 +31,19 @@ export async function processTranscriptTurn(
 }
 
 const SYSTEM_PROMPT = `
-You are the Lead Technical Assessor for RoundTable AI. Your job is to analyze the ongoing interview transcript and update the candidate's state vector based on the evidence they provide.
+You are the Lead Assessor for RoundTable AI. Your job is to analyze the ongoing interview transcript and update the candidate's state vector based on the evidence they provide.
+
+The current active role you are adopting is dynamically passed to you, but your scoring criteria remain universal:
 
 Scoring Rules (Technical AI Policy):
 - If the candidate provides specific, accurate technical details, increase 'technical' score.
-- If the candidate describes business impact or user empathy, increase 'product' score.
 - If the candidate discusses architecture, trade-offs, or scale, increase 'systemDesign' score.
-- If the candidate communicates clearly and concisely, increase 'communication' score.
+- If the candidate describes business impact, user empathy, or metrics, increase 'product' score.
+- If the candidate communicates clearly, concisely, or resolves conflict, increase 'communication' score.
 - If the candidate is vague or incorrect, decrease the relevant scores slightly.
 
-You must output a JSON object containing the delta (-0.2 to +0.2) for each category, a short reasoning string, and optionally a nextAction if a role switch is recommended (e.g., if a category score crosses 0.7, you might recommend switching to another role to test a different skill).
+You must output a JSON object containing the delta (-0.2 to +0.2) for each category, and a short reasoning string.
+The backend engine will handle the role transition logic.
 `;
 
 async function runRealLLMAnalysis(
@@ -90,7 +94,7 @@ async function runRealLLMAnalysis(
     contents: [
       {
         parts: [{
-          text: `Current Candidate State (Scale 0.0 to 1.0):\nTechnical: ${session.state.technical.toFixed(2)}\nProduct: ${session.state.product.toFixed(2)}\nSystem Design: ${session.state.systemDesign.toFixed(2)}\nCommunication: ${session.state.communication.toFixed(2)}\nConfidence: ${session.state.confidence.toFixed(2)}\n\nRecent Transcript:\n${recentTranscript}\n\nAnalyze the candidate's latest response. Generate the state deltas and determine if a role switch is needed.`
+          text: `Current Active Role: ${session.activeRole}\n\nCurrent Candidate State (Scale 0.0 to 1.0):\nTechnical: ${session.state.technical.toFixed(2)}\nProduct: ${session.state.product.toFixed(2)}\nSystem Design: ${session.state.systemDesign.toFixed(2)}\nCommunication: ${session.state.communication.toFixed(2)}\nConfidence: ${session.state.confidence.toFixed(2)}\n\nRecent Transcript:\n${recentTranscript}\n\nAnalyze the candidate's latest response. Generate the state deltas.`
         }]
       }
     ],
@@ -129,9 +133,23 @@ async function runRealLLMAnalysis(
     console.log(`[Orchestrator] Reasoning:`, object.reasoning);
 
     let nextAction = null;
-    if (object.nextAction && object.nextAction.role) {
-      console.log(`[Orchestrator] Recommending role switch to ${object.nextAction.role}.`);
-      nextAction = object.nextAction as NextInterviewAction;
+    
+    // Orchestrator Transition Logic based on activeRole
+    if (session.activeRole === 'technical') {
+      if (newState.technical > 0.6) {
+        console.log(`[Orchestrator] Technical bar met. Transitioning to Product.`);
+        nextAction = { modality: 'voice', role: 'product', objective: 'Assess customer impact of the technical architecture.' } as NextInterviewAction;
+      }
+    } else if (session.activeRole === 'product') {
+      if (newState.product > 0.6) {
+        console.log(`[Orchestrator] Product bar met. Transitioning to Manager.`);
+        nextAction = { modality: 'voice', role: 'manager', objective: 'Assess leadership and conflict resolution.' } as NextInterviewAction;
+      }
+    } else if (session.activeRole === 'manager') {
+      if (newState.communication > 0.6) {
+        console.log(`[Orchestrator] Manager/Communication bar met. Transitioning to Code Workspace.`);
+        nextAction = { modality: 'code', role: 'technical', objective: 'Implement the cache logic discussed earlier.' } as NextInterviewAction;
+      }
     }
 
     return { newState, action: nextAction };
