@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
-import { CodeWorkspace } from './CodeWorkspace';
+import { InterviewWorkspace } from './InterviewWorkspace';
 
 type QuickstartConversationLayoutProps = {
   statusPanel: ReactNode;
@@ -12,7 +12,8 @@ type QuickstartConversationLayoutProps = {
   visualizer: ReactNode;
   controls: ReactNode;
   onEndConversation: () => void;
-  activeModality?: 'voice' | 'code';
+  activeModality?: 'voice' | 'code' | 'canvas' | 'scenario';
+  sessionId?: string;
 };
 
 export function QuickstartConversationLayout({
@@ -23,6 +24,7 @@ export function QuickstartConversationLayout({
   controls,
   onEndConversation,
   activeModality = 'voice',
+  sessionId,
 }: QuickstartConversationLayoutProps) {
   return (
     <div className="flex min-h-0 flex-1 flex-col text-left">
@@ -37,8 +39,9 @@ export function QuickstartConversationLayout({
           />
           <div className="flex min-w-0 flex-col justify-center gap-1">
             <span className="truncate text-lg font-semibold leading-none tracking-[-0.025em] text-foreground">
-              Agora Conversational AI
+              RoundTable AI Interview
             </span>
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-primary">AI interview panel</span>
             {pipelineMetrics}
           </div>
         </div>
@@ -75,10 +78,10 @@ export function QuickstartConversationLayout({
         </main>
 
         {/* Code Workspace */}
-        {activeModality === 'code' && (
+        {activeModality !== 'voice' && sessionId && (
           <section className="order-2 flex min-h-0 flex-1 flex-col lg:order-3 lg:border-l lg:border-border/80 lg:pl-6">
             <div className="flex h-full w-full py-3 md:pb-6">
-              <CodeWorkspace />
+              <InterviewWorkspace sessionId={sessionId} activeModality={activeModality} />
             </div>
           </section>
         )}

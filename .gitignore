@@ -137,6 +137,8 @@ dist
 .pnpm-store/
 
 .DS_Store
-docs/
+docs/*
+!docs/ai/
+!docs/ai/**
 Sprints/
 .vercel

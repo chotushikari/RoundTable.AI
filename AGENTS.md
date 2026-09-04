@@ -30,14 +30,16 @@ The sections below (Start Here, Patterns, Anti-Patterns, etc.) remain the canoni
 - Toolkit core: `agora-agent-client-toolkit` for `AgoraVoiceAI`, transcript helpers, and turn status
 - UI components: `agora-agent-uikit` for visualizer, transcript, and mic controls
 - Server SDK: `agora-agents` for managed agent session startup
-- API routes: token generation, agent invite, chat, and stop routes live in `app/api`
-- Default agent config: Agora-managed STT, LLM, and TTS; `.env.local` contains only Agora project credentials
+- Product APIs: company interviews, signed invitations, sessions, artifacts, assessment release, MCP, and Agora webhooks live in `app/api`
+- Voice pipeline: Agora-managed STT/TTS with an authenticated RoundTable custom LLM/controller endpoint
+- Persistence and auth: Supabase in production; process-local memory is development/test fallback only
+- Workspaces: Monaco code and React Flow canvas checkpoints; server-selected E2B execution
 
 ## Supported Modes
 
 ### Local Development
 
-- Run from the repo root with `pnpm run dev`.
+- Run from the repo root with `npm run dev`.
 - Next.js serves the app and the route handlers at `http://localhost:3000`.
 - Local credentials are read from `.env.local`, usually written by `agora project env write .env.local`.
 
@@ -59,13 +61,22 @@ The sections below (Start Here, Patterns, Anti-Patterns, etc.) remain the canoni
 - `app/api/generate-agora-token/route.ts`: issues RTC + RTM tokens for the browser user.
 - `app/api/invite-agent/route.ts`: starts the managed agent session; edit here for system prompt, VAD, model, or voice changes.
 - `app/api/stop-conversation/route.ts`: stops the agent session.
-- `app/api/chat/completions/route.ts`: optional OpenAI-compatible SSE proxy for a custom LLM (not wired by default).
+- `app/api/ai/chat/completions/route.ts`: per-session authenticated OpenAI-compatible adaptive controller used by Agora.
+- `app/api/interviews/`: company definition, plan, version, publication, and status routes.
+- `app/api/invitations/`: public invitation preview and consent-gated guest session bootstrap.
+- `app/api/sessions/`: authenticated lifecycle, event, artifact, tool, results, and release routes.
+- `app/api/mcp/[grant]/route.ts`: session-scoped Streamable HTTP workspace tools.
+- `app/api/webhooks/agora/route.ts`: signed lifecycle reconciliation and finalization.
 - `components/LandingPage.tsx`: session bootstrap, RTM setup, provider wiring, and conversation lifecycle.
 - `components/ConversationComponent.tsx`: RTC join, mic publication, `AgoraVoiceAI` init, transcript state, and renewals.
 - `components/QuickstartConversationLayout.tsx`: in-call header, transcript rail, and controls dock.
 - `components/QuickstartPipelineMetrics.tsx`: per-stage latency chips from `AGENT_METRICS`.
 - `components/QuickstartTranscriptPanel.tsx`: live transcript rail.
 - `lib/agora.ts`: shared agent UID defaults.
+- `lib/agora-server.ts`: combined RTC/RTM token generation and managed interview-agent lifecycle.
+- `lib/interview-controller.ts`: all-role evidence evaluation and deterministic next-speaker rules.
+- `lib/interview-store.ts`: Supabase persistence with development/test memory fallback.
+- `lib/assessment.ts`: structured evidence-only final assessment.
 - `lib/conversation.ts`: transcript normalization and visualizer state mapping.
 - `env.local.example`: local environment template.
 - `scripts/verify-api-contracts.ts`: route contract verification.
@@ -137,33 +148,33 @@ useEffect(() => {
 From the repo root:
 
 ```bash
-pnpm install
-pnpm run doctor
-pnpm run dev
-pnpm run verify
+npm install
+npm run doctor
+npm run dev
+npm run verify
 ```
 
 Useful narrower checks:
 
 ```bash
-pnpm run lint
-pnpm run typecheck
-pnpm run verify:api
-pnpm run build
+npm run lint
+npm run typecheck
+npm run verify:api
+npm run build
 ```
 
 ## Verification Safety
 
 - Safe without live Agora credentials:
-  - `pnpm run lint`
-  - `pnpm run typecheck`
-  - `pnpm run verify:api`
-  - `pnpm run build`
+  - `npm run lint`
+  - `npm run typecheck`
+  - `npm run verify:api`
+  - `npm run build`
 - Requires local env setup but not a live Agora session:
-  - `pnpm run doctor`
-  - `pnpm run verify`
+  - `npm run doctor`
+  - `npm run verify`
 - Often blocked inside restricted sandboxes because of port binding or process spawning:
-  - `pnpm run dev`
+  - `npm run dev`
 
 ## Anti-Patterns / What NOT To Do
 
@@ -174,13 +185,18 @@ pnpm run build
 - Do not use the deprecated `turnDetection.type: 'agora_vad'` flat API; use `turnDetection.config.start_of_speech` and `turnDetection.config.end_of_speech`.
 - Do not replace `RtcTokenBuilder.buildTokenWithRtm` with an RTC-only token builder.
 - Do not hide SDK requirements only in `CLAUDE.md`; all agent-facing guidance belongs in `AGENTS.md`.
+- Do not restore browser-owned candidate scores, role selection, or prompt updates; authoritative interview state is server-owned and versioned.
+- Do not accept caller-supplied system prompts or model IDs at the custom LLM boundary.
+- Do not publish transcript, answers, artifacts, scores, or assessment tables through Realtime; publish only `company_session_status`.
+- Do not use resume claims as evidence. Resume text may only seed verification questions.
+- Do not emit automatic hire/reject decisions; every final assessment must keep `humanReviewRequired: true`.
 
 ## Done Criteria
 
 Before finishing a change:
 
 1. Run the narrowest relevant verification command.
-2. For shipped app/runtime changes, ensure `pnpm run verify` passes.
+2. For shipped app/runtime changes, ensure `npm run verify` passes. When live credentials are unavailable, run every offline subcommand and record the blocked doctor/live gates explicitly.
 3. If you changed files in `components/` or `app/api/`, verify that `README.md`, this file, and the relevant `docs/ai/` files still match the implementation.
 4. Update root README and affected docs when workflow, request contracts, architecture, or environment guidance changes.
 5. If the change touches workflows, interfaces, gotchas, or security details, update the matching file under [docs/ai/L1/](docs/ai/L1/) and bump `Last Reviewed` in [docs/ai/L0_repo_card.md](docs/ai/L0_repo_card.md).

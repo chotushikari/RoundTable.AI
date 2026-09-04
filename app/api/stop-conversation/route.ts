@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { AgoraClient, Area } from 'agora-agents';
 import { StopConversationRequest } from '@/types/conversation';
+import { legacyDemoEnabled } from '@/lib/legacy-demo';
 
 function isAgentAlreadyStoppingOrStopped(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
@@ -23,6 +24,7 @@ function isAgentAlreadyStoppingOrStopped(error: unknown): boolean {
 }
 
 export async function POST(request: Request) {
+  if (!legacyDemoEnabled()) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   try {
     const body: StopConversationRequest = await request.json();
     const { agent_id } = body;

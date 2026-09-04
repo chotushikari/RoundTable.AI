@@ -10,6 +10,7 @@ import {
 } from 'agora-agents';
 import { ClientStartRequest, AgentResponse } from '@/types/conversation';
 import { DEFAULT_AGENT_UID } from '@/lib/agora';
+import { legacyDemoEnabled } from '@/lib/legacy-demo';
 
 // System prompt that defines the agent's personality and behavior.
 // Swap this out to change what the agent talks about.
@@ -51,6 +52,7 @@ function requireEnv(name: string): string {
 }
 
 export async function POST(request: NextRequest) {
+  if (!legacyDemoEnabled()) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   try {
     // --- 1. Parse request ---
 

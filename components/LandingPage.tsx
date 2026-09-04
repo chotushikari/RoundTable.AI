@@ -54,7 +54,14 @@ const AgoraProvider = dynamic(
   { ssr: false },
 );
 
-export default function LandingPage() {
+type InvitationPreview = {
+  roleTitle: string;
+  durationMinutes: number;
+  panelRoles: string[];
+  existingSession?: { id: string; status: string } | null;
+};
+
+export default function LandingPage({ invitationToken }: { invitationToken?: string }) {
   const [showConversation, setShowConversation] = useState(false);
 
   // Preload heavy modules on mount so they're already cached when the user
@@ -68,6 +75,28 @@ export default function LandingPage() {
   const [agoraData, setAgoraData] = useState<AgoraTokenData | null>(null);
   const [rtmClient, setRtmClient] = useState<RTMClient | null>(null);
   const [agentJoinError, setAgentJoinError] = useState(false);
+  const [consent, setConsent] = useState(false);
+  const [invitation, setInvitation] = useState<InvitationPreview | null>(null);
+  const [completed, setCompleted] = useState(false);
+  const [resumeText, setResumeText] = useState('');
+  const [releasedFeedback, setReleasedFeedback] = useState<{ strengths: string[]; growthAreas: string[] } | null>(null);
+
+  useEffect(() => {
+    if (!invitationToken) return;
+    fetch(`/api/invitations/${encodeURIComponent(invitationToken)}`)
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error ?? 'Invitation could not be loaded');
+        setInvitation(data);
+        if (data.existingSession?.status === 'completed') {
+          setCompleted(true);
+          void fetch(`/api/sessions/${data.existingSession.id}`)
+            .then((result) => result.json())
+            .then((result) => setReleasedFeedback(result.feedback ?? null));
+        }
+      })
+      .catch((loadError) => setError(loadError instanceof Error ? loadError.message : 'Invitation could not be loaded'));
+  }, [invitationToken]);
 
   const handleStartConversation = async () => {
     setIsLoading(true);
@@ -75,6 +104,29 @@ export default function LandingPage() {
     setAgentJoinError(false);
 
     try {
+      if (invitationToken) {
+        const resumeId = invitation?.existingSession?.status === 'in_progress' ? invitation.existingSession.id : null;
+        const sessionResponse = await fetch(resumeId
+          ? `/api/sessions/${resumeId}/resume`
+          : `/api/invitations/${encodeURIComponent(invitationToken)}/session`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: resumeId ? undefined : JSON.stringify({ consent, resumeText: resumeText || undefined }),
+        });
+        const responseData = await sessionResponse.json();
+        if (!sessionResponse.ok) throw new Error(responseData.error ?? 'Failed to start interview');
+        const { default: AgoraRTM } = await import('agora-rtm');
+        const rtm: RTMClient = new AgoraRTM.RTM(
+          process.env.NEXT_PUBLIC_AGORA_APP_ID!,
+          responseData.rtcUid,
+        );
+        await rtm.login({ token: responseData.rtmToken });
+        await rtm.subscribe(responseData.channel);
+        setRtmClient(rtm);
+        setAgoraData({ ...responseData, uid: responseData.rtcUid, token: responseData.rtcToken });
+        setShowConversation(true);
+        return;
+      }
       // 1. Fetch RTC token + channel
       // console.log('Fetching Agora token...');
       const agoraResponse = await fetch('/api/generate-agora-token');
@@ -151,6 +203,12 @@ export default function LandingPage() {
         //   - RTC uses the browser client's assigned UID (passed in from ConversationComponent).
         //   - RTM uses the same UID that was used during RTM login (agoraData.uid).
         // Both are fetched in parallel to stay within the token-expiry grace-period window.
+        if (agoraData.sessionId) {
+          const response = await fetch(`/api/sessions/${agoraData.sessionId}/renew`, { method: 'POST' });
+          const data = await response.json();
+          if (!response.ok) throw new Error(data.error ?? 'Failed to renew session tokens');
+          return { rtcToken: data.rtcToken, rtmToken: data.rtmToken };
+        }
         const [rtcResponse, rtmResponse] = await Promise.all([
           fetch(`/api/generate-agora-token?channel=${channel}&uid=${uid}`),
           fetch(`/api/generate-agora-token?channel=${channel}&uid=${agoraData.uid}`),
@@ -177,8 +235,17 @@ export default function LandingPage() {
   );
 
   const handleEndConversation = async () => {
+    if (agoraData?.sessionId) {
+      try {
+        await fetch(`/api/sessions/${agoraData.sessionId}/stop`, { method: 'POST' });
+        await fetch(`/api/sessions/${agoraData.sessionId}/finalize`, { method: 'POST' });
+        setCompleted(true);
+      } catch (stopError) {
+        console.error('Failed to finalize interview:', stopError);
+      }
+    }
     // Stop the AI agent
-    if (agoraData?.agentId) {
+    if (agoraData?.agentId && !agoraData.sessionId) {
       try {
         // console.log('Stopping agent:', agoraData.agentId);
         const response = await fetch('/api/stop-conversation', {
@@ -219,11 +286,24 @@ export default function LandingPage() {
           }`}
         >
           {!showConversation ? (
-            <QuickstartPreCallCard
-              isLoading={isLoading}
-              error={error}
-              onStartConversation={handleStartConversation}
-            />
+            completed ? (
+              <div className="max-w-lg rounded-2xl border border-border bg-card p-8 text-center">
+                <h1 className="text-2xl font-semibold">Interview complete</h1>
+                <p className="mt-3 text-sm text-muted-foreground">Your evidence is ready for human review. Feedback appears only if the company releases it.</p>
+                {releasedFeedback && <div className="mt-6 text-left text-sm"><h2 className="font-semibold">Released summary</h2><p className="mt-2">Strengths: {releasedFeedback.strengths.join(' ') || 'No supported strength was released.'}</p><p className="mt-2">Growth areas: {releasedFeedback.growthAreas.join(' ') || 'No growth area was released.'}</p></div>}
+              </div>
+            ) : (
+              <QuickstartPreCallCard
+                isLoading={isLoading}
+                error={error}
+                onStartConversation={handleStartConversation}
+                interview={invitation}
+                requiresConsent={Boolean(invitationToken)}
+                consent={consent}
+                onConsentChange={setConsent}
+                onResumeTextChange={setResumeText}
+              />
+            )
           ) : agoraData && rtmClient ? (
             <>
               {/* Non-fatal invite warning: the browser session can still render even if agent start failed. */}
@@ -260,7 +340,7 @@ export default function LandingPage() {
       <footer className="fixed bottom-0 right-0 z-40 py-4 pr-4 md:py-6 md:pr-6">
         <div className="flex items-center justify-end gap-2 text-muted-foreground">
           <span className="text-xs font-medium tracking-wide uppercase">
-            Powered by
+            {invitationToken ? 'AI interview panel · Powered by' : 'Powered by'}
           </span>
           <a
             href="https://agora.io/en/"

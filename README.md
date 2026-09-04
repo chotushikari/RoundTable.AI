@@ -1,48 +1,90 @@
-# RoundTable AI 
+# RoundTable AI
 
-**The Continuous Adaptive Interview Workspace**
+RoundTable is a backend-first, voice-native adaptive interview panel. One interruptible Agora Conversational AI agent speaks for several logical interviewers, while a deterministic controller chooses exactly one role and one objective per candidate turn.
 
-RoundTable AI replaces rigid interview "levels" with a fluid, continuous adaptive interview. The interview is multimodal: voice-first, powered by Agora Conversational AI, but seamlessly transitions personas (Technical -> Product -> Communication) based on real-time LLM analysis (Two-Speed Intelligence) of the candidate's speech.
+The MVP supports Technical, Product, Hiring Manager, Behavioural, and Customer perspectives; signed single-use invitations; shared durable context; dynamic follow-ups; difficulty adjustment; vague-answer and contradiction checks; Monaco and React Flow workspaces; session-scoped MCP tools; isolated E2B tests; and evidence-linked final assessments. It never emits an automatic hire/reject decision.
 
-[**View Project on GitHub**](https://github.com/chotushikari/RoundTable.AI)
+## Current verification status
 
-## 🚀 Deployment
+The code is derived from Agora's official `agent-quickstart-nextjs`, and the source mapping has been checked. Offline tests, lint, type checking, API contract checks, and a production build are the required local gates. A real Agora voice round trip, RTM transcript delivery, token renewal, 20-attempt barge-in test, and impaired-network test still require project credentials and must not be reported as verified until they are run.
 
-This project is Vercel-ready (stateless architecture)! To deploy:
-1. Push this repository to GitHub.
-2. Import the repository in [Vercel](https://vercel.com).
-3. Set the following Environment Variables in Vercel:
-   - `NEXT_PUBLIC_AGORA_APP_ID` (Your Agora App ID)
-   - `NEXT_AGORA_APP_CERTIFICATE` (Your Agora App Certificate)
-   - `GEMINI_API_KEY` (Your Google AI Studio Key)
+## Architecture
 
-## ✅ What's Done (Checklist)
+```text
+Candidate browser <-- Agora RTC/RTM --> one managed voice agent
+                                           |
+                                 /api/ai/chat/completions
+                                           |
+                           panel evaluator + controller
+                              |                    |
+                         Supabase            MCP / E2B
 
-- [x] **Sprint 00: Audit & Baseline**
-  - Next.js foundation initialized.
-- [x] **Sprint 01: Agora Vertical Slice**
-  - Integrated `agora-rtc-react`, `agora-rtm`, and `agora-agents`.
-  - Established real-time voice plane with structured event logging (`SESSION_STARTED`, `TRANSCRIPT_FINAL`, etc.).
-- [x] **Sprint 02: Candidate State & Orchestrator**
-  - Built the **Deep Path Orchestrator** which listens to transcripts and maintains a 5-dimensional candidate state (`technical`, `product`, `systemDesign`, `communication`, `confidence`).
-  - Integrated Agora REST API (`POST /update`) to dynamically inject new system prompts into the live agent without dropping the call.
-- [x] **Sprint 03: Technical AI Policies (Real LLM)**
-  - Swapped mock intelligence for real **Gemini 3.8 Flash** integration via REST API.
-  - Implemented strict `SYSTEM_PROMPT` to analyze candidate transcripts and extract JSON state updates.
-- [x] **Sprint 03.5: Vercel Scalability Refactor** (*Damn Important Fix*)
-  - Refactored the orchestrator to be 100% stateless! Moved the `CandidateState` and rolling transcript buffer into the React frontend (`useRef`). 
-  - The API route is now safe for Vercel serverless deployment and won't lose state on cold starts.
+Company dashboard <-- status-only Realtime projection while live
+Company results   <-- transcript + assessment after completion
+```
 
-## ⏳ What's Remaining (Future Sprints)
-- [ ] **Sprint 04: Product & Hiring Manager Profiles**
-  - Define the AI policies and prompt transitions for Product and Manager roles.
-- [ ] **Sprint 05: Code Workspace (Multimodal UX)**
-  - Build the visual code editor that opens when the interviewer asks the candidate to implement their design.
-- [ ] **Sprint 06: Control Room UX**
-  - Build the dashboard for hiring managers to view the candidate's live telemetry in real-time.
+The browser never owns scores, role selection, or candidate state. Each finalized answer is reserved with a hash, evaluated once for all configured roles, checked against literal transcript evidence, and committed with compare-and-swap session state. Duplicate LLM calls reuse the stored response.
 
----
+## Setup
 
-### *Original Quickstart Documentation Below*
+Requirements: Node.js 22+, npm, an Agora project with Conversational AI and RTM enabled, a Supabase project, Gemini API access, and E2B.
 
-This project was built on top of the Agora Conversational AI Next.js Quickstart.
+```bash
+npm install
+copy env.local.example .env.local
+npm run doctor
+npm run dev
+```
+
+Apply [the Supabase migration](supabase/migrations/202609040001_roundtable_core.sql) before using company or candidate flows. Configure these values in `.env.local` and in Vercel:
+
+- `NEXT_PUBLIC_AGORA_APP_ID`, `NEXT_AGORA_APP_CERTIFICATE`
+- `APP_BASE_URL`
+- `GEMINI_API_KEY`, with optional `GEMINI_EVALUATOR_MODEL` and `GEMINI_SPEAKER_MODEL`
+- `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`
+- `SESSION_SIGNING_SECRET`
+- `E2B_API_KEY`
+- `AGORA_WEBHOOK_SECRET`
+- `CRON_SECRET`
+
+Secrets without the `NEXT_PUBLIC_` prefix must never reach the browser.
+
+## Product flow
+
+1. A company signs in at `/company`, creates an organization, pastes a JD and desired outcomes, and chooses two to five panel roles.
+2. `POST /api/interviews/:id/plan` creates a Zod-validated editable rubric. Employer text is treated as untrusted input.
+3. Publishing freezes an immutable version and returns a seven-day, single-use candidate URL.
+4. The candidate sees the fixed AI/retention/human-review disclosure and must consent before the server creates the Agora session.
+5. Agora calls the authenticated OpenAI-compatible endpoint. It ignores caller model and system instructions, stores transcript evidence, evaluates all roles, applies controller rules, and streams the chosen interviewer question.
+6. Code/canvas drafts autosave; only explicit checkpoints are exposed to AI tools. E2B executes a server-selected JS/TS harness for at most 15 seconds with capped output and no app secrets.
+7. Finalization creates an idempotent evidence-linked assessment. The company gets the report after completion; candidate feedback remains hidden until explicitly released.
+
+## Main APIs
+
+- `POST /api/interviews`, `POST /api/interviews/:id/plan`, `POST /api/interviews/:id/publish`
+- `GET /api/invitations/:token`, `POST /api/invitations/:token/session`
+- `POST /api/sessions/:id/renew|stop|finalize|release`
+- `GET|PUT /api/sessions/:id/artifacts/:type`
+- `POST /api/ai/chat/completions`
+- `POST /api/mcp/:grant`
+- `POST /api/webhooks/agora`
+
+Company endpoints require a Supabase access token. Candidate session endpoints require the HttpOnly signed guest cookie. The LLM endpoint uses a random per-session bearer credential known only to Agora and the server.
+
+The original unauthenticated quickstart token/start/stop routes remain available only in non-production for baseline diagnostics. Production returns 404 unless `ENABLE_LEGACY_QUICKSTART_DEMO=true` is set deliberately.
+
+## Verification
+
+```bash
+npm test
+npm run lint
+npm run typecheck
+npm run verify:api
+npm run build
+```
+
+`npm run verify` begins with `doctor`, so it requires a complete `.env.local`. Supabase RLS assertions are in [supabase/tests/rls.sql](supabase/tests/rls.sql).
+
+## Privacy and scope
+
+No raw audio or video is recorded. Transcript, resume, events, artifacts, tool results, assessments, and claimed invitation metadata are purged 30 days after completion by `purge_expired_interview_data()`; `vercel.json` invokes it daily through an authenticated cron route. Live company views receive only session ID, status, health, and timestamps. Video identity/lip-sync analysis, avatars, candidate accounts, ATS integrations, multilingual support, and automatic employment decisions are intentionally outside this MVP.

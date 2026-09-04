@@ -43,13 +43,6 @@ import {
   type QuickstartAgentMetric,
 } from './QuickstartPipelineMetrics';
 import { QuickstartTranscriptPanel } from './QuickstartTranscriptPanel';
-import type {
-  AgoraTokenData,
-  ClientStartRequest,
-  AgentResponse,
-  AgoraRenewalTokens,
-} from '../types/conversation';
-import type { CandidateState } from '../lib/orchestrator';
 import type { ConversationComponentProps } from '@/types/conversation';
 
 // Cap the displayed issues list to avoid overwhelming the UI during a cascade of errors.
@@ -104,61 +97,36 @@ export default function ConversationComponent({
   onEndConversation,
 }: ConversationComponentProps) {
   const agentUID = String(DEFAULT_AGENT_UID);
-  const restAgentId = (agoraData as any).agentId;
-
-  const candidateStateRef = useRef<CandidateState>({
-    technical: 0.1,
-    product: 0.1,
-    systemDesign: 0.1,
-    communication: 0.1,
-    confidence: 0.1,
-  });
-  
-  const activeRoleRef = useRef<'technical' | 'product' | 'manager'>('technical');
-
-  const recentTranscriptRef = useRef<string[]>([]);
-
-  const logEvent = useCallback((type: string, payload: any) => {
-    // If it's a transcript update, track it
-    if (type === 'TRANSCRIPT_FINAL') {
-      recentTranscriptRef.current.push(`[${payload.message.uid.toString() === agentUID.toString() ? 'agent' : 'user'}] ${payload.message.text}`);
-      if (recentTranscriptRef.current.length > 10) recentTranscriptRef.current.shift();
-    }
-
-    fetch('/api/logger', {
-      method: 'POST',
-      body: JSON.stringify({ 
-        type, 
-        timestamp: Date.now(), 
-        agentUID, 
-        restAgentId,
-        currentState: candidateStateRef.current,
-        activeRole: activeRoleRef.current,
-        recentTranscript: recentTranscriptRef.current,
-        ...payload 
-      }),
-    })
-    .then(res => res.json())
-    .then(data => {
-      if (data.newState) {
-        candidateStateRef.current = data.newState;
-      }
-      if (data.newRole) {
-        activeRoleRef.current = data.newRole;
-      }
-      if (data.newModality) {
-        setActiveModality(data.newModality);
-      }
-    })
-    .catch(() => {});
-  }, [agentUID, restAgentId]);
 
   const client = useRTCClient();
   const remoteUsers = useRemoteUsers();
   const [isEnabled, setIsEnabled] = useState(true);
   const [isAgentConnected, setIsAgentConnected] = useState(false);
   const [isConnectionDetailsOpen, setIsConnectionDetailsOpen] = useState(false);
-  const [activeModality, setActiveModality] = useState<'voice' | 'code'>('voice');
+  const [activeModality, setActiveModality] = useState<'voice' | 'code' | 'canvas' | 'scenario'>('voice');
+
+  const logEvent = useCallback((type: 'AGENT_STATE_CHANGED' | 'METRICS' | 'ERROR' | 'CONNECTION_STATE' | 'INTERRUPTED', payload: Record<string, unknown>) => {
+    if (!agoraData.sessionId) return;
+    fetch(`/api/sessions/${agoraData.sessionId}/events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type, payload }),
+    }).catch(() => {});
+  }, [agoraData.sessionId]);
+
+  useEffect(() => {
+    if (!agoraData.sessionId) return;
+    const refresh = () => fetch(`/api/sessions/${agoraData.sessionId}`)
+      .then((response) => response.ok ? response.json() : null)
+      .then((data) => {
+        const modality = data?.session?.currentModality;
+        if (['voice', 'code', 'canvas', 'scenario'].includes(modality)) setActiveModality(modality);
+      })
+      .catch(() => {});
+    refresh();
+    const interval = window.setInterval(refresh, 2_000);
+    return () => window.clearInterval(interval);
+  }, [agoraData.sessionId]);
 
   // Tracks granular RTC connection state for the status dot.
   // Agora states: DISCONNECTED | CONNECTING | CONNECTED | DISCONNECTING | RECONNECTING
@@ -439,12 +407,9 @@ export default function ConversationComponent({
     const latestMessage = messageList[messageList.length - 1];
     
     if (latestMessage.turn_id !== lastLoggedTurnRef.current) {
-      logEvent(String(latestMessage.status) === 'interrupted' ? 'INTERRUPTED' : 'TRANSCRIPT_FINAL', { 
-        turn_id: latestMessage.turn_id,
-        uid: latestMessage.uid,
-        text: latestMessage.text,
-        status: latestMessage.status
-      });
+      if (String(latestMessage.status).toLocaleLowerCase().includes('interrupt')) {
+        logEvent('INTERRUPTED', { turnId: latestMessage.turn_id });
+      }
       lastLoggedTurnRef.current = latestMessage.turn_id;
     }
   }, [messageList, logEvent]);
@@ -460,7 +425,6 @@ export default function ConversationComponent({
   useClientEvent(client, 'user-joined', (user) => {
     if (user.uid.toString() === agentUID) {
       setIsAgentConnected(true);
-      logEvent('SESSION_STARTED', { agentUID });
     }
   });
 
@@ -478,6 +442,7 @@ export default function ConversationComponent({
 
   useClientEvent(client, 'connection-state-change', (curState) => {
     setConnectionState(curState);
+    logEvent('CONNECTION_STATE', { state: curState, timestamp: Date.now() });
   });
 
   const connectionSeverity = useMemo<'normal' | 'warning' | 'error'>(() => {
@@ -553,6 +518,7 @@ export default function ConversationComponent({
   return (
     <QuickstartConversationLayout
       activeModality={activeModality}
+      sessionId={agoraData.sessionId}
       statusPanel={
         <ConnectionStatusPanel
           connectionState={connectionState}

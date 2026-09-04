@@ -7,12 +7,26 @@ type QuickstartPreCallCardProps = {
   isLoading: boolean;
   error: string | null;
   onStartConversation: () => void;
+  interview?: {
+    roleTitle: string;
+    durationMinutes: number;
+    panelRoles: string[];
+  } | null;
+  requiresConsent?: boolean;
+  consent?: boolean;
+  onConsentChange?: (consent: boolean) => void;
+  onResumeTextChange?: (resumeText: string) => void;
 };
 
 export function QuickstartPreCallCard({
   isLoading,
   error,
   onStartConversation,
+  interview,
+  requiresConsent = false,
+  consent = false,
+  onConsentChange,
+  onResumeTextChange,
 }: QuickstartPreCallCardProps) {
   return (
     <div
@@ -23,16 +37,43 @@ export function QuickstartPreCallCard({
       }}
     >
       <h1 className="text-[28px] font-medium leading-[1.2] text-white">
-        Try Agora&apos;s Voice Agent
+        {interview ? `${interview.roleTitle} Interview` : 'Try Agora\'s Voice Agent'}
       </h1>
       <p className="mt-[14px] text-sm font-medium leading-6 text-muted-foreground">
-        Built on Agora&apos;s flagship Conversational AI engine, for effortless
-        agentic conversations.
+        {interview
+          ? `${interview.durationMinutes} minutes with ${interview.panelRoles.length} AI panel roles. A human reviews the evidence; the AI never makes a hiring decision.`
+          : `Built on Agora's flagship Conversational AI engine, for effortless agentic conversations.`}
       </p>
+
+      {requiresConsent && (
+        <>
+        <label className="mt-6 flex items-start gap-3 text-left text-xs leading-5 text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={consent}
+            onChange={(event) => onConsentChange?.(event.target.checked)}
+            className="mt-1"
+          />
+          <span>I understand that I am speaking with an AI interview panel, the transcript and workspace evidence are retained for 30 days, raw audio/video is not recorded, and a human review is required.</span>
+        </label>
+        <label className="mt-4 w-full text-left text-xs text-muted-foreground">
+          Optional resume (.txt or .md)
+          <input
+            type="file"
+            accept=".txt,.md,text/plain,text/markdown"
+            className="mt-2 block w-full text-xs"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) void file.text().then((text) => onResumeTextChange?.(text));
+            }}
+          />
+        </label>
+        </>
+      )}
 
       <Button
         onClick={onStartConversation}
-        disabled={isLoading}
+        disabled={isLoading || (requiresConsent && !consent)}
         className="mt-12 h-10 w-full rounded-lg border border-primary bg-primary text-sm font-medium text-black hover:border-white hover:bg-white hover:text-black disabled:hover:border-primary disabled:hover:bg-primary disabled:hover:text-black"
         aria-label={
           isLoading
@@ -46,7 +87,7 @@ export function QuickstartPreCallCard({
             Starting...
           </>
         ) : (
-          'Start Conversation'
+          interview ? 'Start AI Interview' : 'Start Conversation'
         )}
       </Button>
       {error && <p className="mt-3 text-xs text-destructive">{error}</p>}
