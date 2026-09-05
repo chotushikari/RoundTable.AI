@@ -5,6 +5,8 @@ export interface AgoraTokenData {
   uid: string;
   channel: string;
   agentId?: string;
+  /** Stable persistence key (UUID) minted at interview start. */
+  interview_id?: string;
 }
 
 export interface ClientStartRequest {

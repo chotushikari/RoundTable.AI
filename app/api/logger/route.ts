@@ -1,80 +1,86 @@
 import { NextResponse } from 'next/server';
-import { processTranscriptTurn, NextInterviewAction } from '@/lib/orchestrator';
-import { AgoraClient, Area } from 'agora-agents';
+import { randomUUID } from 'crypto';
+import { appendEvent, ensureInterview } from '@/lib/db/repository';
+import type { InterviewEvent } from '@/lib/interview/types';
 
+/**
+ * Event sink for the interview. The client posts structured events; we persist
+ * them durably (append-only, idempotent) as the backbone of the two-speed
+ * intelligence pipeline.
+ *
+ * NOTE (R1): this route now ONLY captures + persists events. The role-switching
+ * "levels" logic that used to live here has been removed — the custom-LLM proxy
+ * (R2) becomes the control plane, and the evidence-gap orchestrator (R4) will
+ * decide next actions from persisted state. This keeps the live voice path fast
+ * and free of synchronous deep analysis.
+ */
 export async function POST(request: Request) {
   try {
     const data = await request.json();
-    // This logs structured events for the Two-Speed Intelligence backend
-    console.log('\n[StructuredEvent]', JSON.stringify(data, null, 2));
-    
-    // In Sprint 02, this is where we will route events to the Candidate State Orchestrator
 
-    if (data.type === 'TRANSCRIPT_FINAL' && data.message) {
-      const isUser = data.message.uid === '0' || data.message.uid === 0; // Depends on how toolkit remapped it. Wait, ConversationComponent normalizes it to the RTC local uid.
-      // We'll just assume if it's not the agentUID, it's the user.
-      // But we don't pass agentUID here easily unless we include it in the payload. Let's assume the client sends it.
-      
-      const agentUID = data.agentUID || 'default'; //      // If it's a final transcript, we run the Two-Speed deep path analysis
-      const speaker = data.message.uid.toString() === agentUID.toString() ? 'agent' : 'user';
-      
-      const { newState, action } = await processTranscriptTurn({
-        agentUid: agentUID,
-        state: data.currentState || { technical: 0.1, product: 0.1, systemDesign: 0.1, communication: 0.1, confidence: 0.1 },
-        activeRole: data.activeRole || 'technical',
-        recentTranscript: data.recentTranscript || []
-      }, speaker);
-      
-      if (action && data.restAgentId) {
-        // Trigger agent update!
-        await triggerAgentUpdate(agentUID, data.restAgentId, action);
-      }
+    // Structured console trace (kept for local debugging / two-speed visibility)
+    console.log('\n[StructuredEvent]', JSON.stringify({ type: data.type }, null, 2));
 
-      return NextResponse.json({ success: true, newState, newRole: action?.role || null, newModality: action?.modality || null });
+    // interview_id: prefer explicit; fall back to Agora channel as a stable key.
+    const interviewId: string | undefined =
+      data.interview_id || data.interviewId || data.channel || data.agentUID;
+
+    // Persist only when we have a usable interview key AND it's a UUID-shaped id.
+    // (During R1 the client may still send the legacy agentUID; we accept a
+    //  provided interview_id and otherwise skip persistence gracefully.)
+    if (data.interview_id) {
+      await ensureInterview(data.interview_id);
+
+      const event: InterviewEvent = {
+        event_id: data.event_id || randomUUID(),
+        interview_id: data.interview_id,
+        event_type: data.type || 'ERROR',
+        source: inferSource(data.type),
+        occurred_at: data.timestamp
+          ? new Date(data.timestamp).toISOString()
+          : new Date().toISOString(),
+        state_version: data.state_version,
+        payload: extractPayload(data),
+      };
+
+      const result = await appendEvent(event);
+      return NextResponse.json({ success: true, persisted: result.ok, deduped: result.deduped });
     }
-    
-    return NextResponse.json({ success: true });
+
+    // No interview_id yet (legacy path) — accept the event but don't persist.
+    return NextResponse.json({ success: true, persisted: false, reason: 'no_interview_id' });
   } catch (err) {
+    console.error('[logger] failed:', err);
     return NextResponse.json({ error: 'Failed to parse event' }, { status: 400 });
   }
 }
 
-async function triggerAgentUpdate(agentUid: string, restAgentId: string, action: NextInterviewAction) {
-  console.log(`[Agent Update Required] Triggering Agora REST API to update agent ${restAgentId} to role ${action.role}`);
-  
-  const appId = process.env.NEXT_PUBLIC_AGORA_APP_ID;
-  const appCertificate = process.env.NEXT_AGORA_APP_CERTIFICATE;
-  
-  if (!appId || !appCertificate || !restAgentId) {
-    console.error('Missing credentials or restAgentId to trigger update');
-    return;
-  }
+function inferSource(type?: string): InterviewEvent['source'] {
+  if (!type) return 'orchestrator';
+  if (type.startsWith('AGORA') || type === 'METRICS' || type === 'AGENT_STATE_CHANGED')
+    return 'agora';
+  if (type.startsWith('TRANSCRIPT') || type === 'INTERRUPTED') return 'candidate';
+  if (type.startsWith('CODE') || type === 'TEST_RESULT') return 'code';
+  if (type.startsWith('MCP')) return 'mcp';
+  if (type.startsWith('ASSESSMENT')) return 'assessment';
+  return 'orchestrator';
+}
 
-  const client = new AgoraClient({
-    area: Area.US,
-    appId,
-    appCertificate,
-  });
-  
-  const newPrompt = `You are now an expert ${action.role} interviewer. ${action.objective} Keep it brief and ask one question at a time. Guide the candidate naturally.`;
-  
-  try {
-    await client.agents.update({
-      appid: appId,
-      agentId: restAgentId,
-      properties: {
-        llm: {
-          system_messages: [
-            {
-              role: 'system',
-              content: newPrompt
-            }
-          ]
-        }
-      }
-    });
-    console.log('[Agent Update Success]');
-  } catch (error) {
-    console.error('[Agent Update Failed]', error);
-  }
+function extractPayload(data: Record<string, unknown>): Record<string, unknown> {
+  // Strip envelope/control fields; keep the event-specific body.
+  const {
+    type: _t,
+    timestamp: _ts,
+    interview_id: _iid,
+    interviewId: _iid2,
+    event_id: _eid,
+    state_version: _sv,
+    currentState: _cs,
+    activeRole: _ar,
+    recentTranscript: _rt,
+    restAgentId: _rid,
+    agentUID: _auid,
+    ...rest
+  } = data;
+  return rest;
 }

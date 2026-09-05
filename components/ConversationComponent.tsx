@@ -105,6 +105,7 @@ export default function ConversationComponent({
 }: ConversationComponentProps) {
   const agentUID = String(DEFAULT_AGENT_UID);
   const restAgentId = (agoraData as any).agentId;
+  const interviewId = agoraData.interview_id;
 
   const candidateStateRef = useRef<CandidateState>({
     technical: 0.1,
@@ -127,15 +128,16 @@ export default function ConversationComponent({
 
     fetch('/api/logger', {
       method: 'POST',
-      body: JSON.stringify({ 
-        type, 
-        timestamp: Date.now(), 
-        agentUID, 
+      body: JSON.stringify({
+        type,
+        interview_id: interviewId,
+        timestamp: Date.now(),
+        agentUID,
         restAgentId,
         currentState: candidateStateRef.current,
         activeRole: activeRoleRef.current,
         recentTranscript: recentTranscriptRef.current,
-        ...payload 
+        ...payload
       }),
     })
     .then(res => res.json())
@@ -151,7 +153,7 @@ export default function ConversationComponent({
       }
     })
     .catch(() => {});
-  }, [agentUID, restAgentId]);
+  }, [agentUID, restAgentId, interviewId]);
 
   const client = useRTCClient();
   const remoteUsers = useRemoteUsers();

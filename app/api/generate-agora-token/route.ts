@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
 import { RtcTokenBuilder, RtcRole } from 'agora-token';
 
 const EXPIRATION_TIME_IN_SECONDS = 3600;
@@ -27,7 +28,15 @@ export async function GET(request: NextRequest) {
   const uid = Number.isNaN(parsedUid) || parsedUid <= 0
     ? Math.floor(Math.random() * 9_999_000) + 1000
     : parsedUid;
-  const channelName = searchParams.get('channel') || generateChannelName();
+  const existingChannel = searchParams.get('channel');
+  const channelName = existingChannel || generateChannelName();
+
+  // interview_id is the stable persistence key (UUID). It is minted once, when a
+  // fresh channel is created (interview start). On token *renewal* (channel passed
+  // back in), the client already holds the interview_id, so we don't mint a new one.
+  const interviewId = existingChannel
+    ? (searchParams.get('interview_id') ?? undefined)
+    : randomUUID();
 
   const expirationTime =
     Math.floor(Date.now() / 1000) + EXPIRATION_TIME_IN_SECONDS;
@@ -49,6 +58,7 @@ export async function GET(request: NextRequest) {
       token,
       uid: uid.toString(),
       channel: channelName,
+      ...(interviewId ? { interview_id: interviewId } : {}),
     });
   } catch (error) {
     console.error('Error generating Agora token:', error);
