@@ -9,8 +9,10 @@ type QuickstartPreCallCardProps = {
   onStartConversation: () => void;
   interview?: {
     roleTitle: string;
+    companyName?: string;
     durationMinutes: number;
     panelRoles: string[];
+    demoMode?: boolean;
   } | null;
   requiresConsent?: boolean;
   consent?: boolean;
@@ -37,11 +39,11 @@ export function QuickstartPreCallCard({
       }}
     >
       <h1 className="text-[28px] font-medium leading-[1.2] text-white">
-        {interview ? `${interview.roleTitle} Interview` : 'Try Agora\'s Voice Agent'}
+        {interview ? `${interview.roleTitle} at ${interview.companyName ?? 'the hiring company'}` : 'Try Agora\'s Voice Agent'}
       </h1>
       <p className="mt-[14px] text-sm font-medium leading-6 text-muted-foreground">
         {interview
-          ? `${interview.durationMinutes} minutes with ${interview.panelRoles.length} AI panel roles. A human reviews the evidence; the AI never makes a hiring decision.`
+          ? `${interview.demoMode ? `One short answer per role; aim for 15–20 seconds each. Finishes after the panel, up to ${interview.durationMinutes} minutes` : `${interview.durationMinutes} minutes`} with ${interview.panelRoles.length} AI panel roles. A human reviews the evidence; the AI never makes a hiring decision.`
           : `Built on Agora's flagship Conversational AI engine, for effortless agentic conversations.`}
       </p>
 

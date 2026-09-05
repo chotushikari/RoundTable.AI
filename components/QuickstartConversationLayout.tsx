@@ -14,6 +14,10 @@ type QuickstartConversationLayoutProps = {
   onEndConversation: () => void;
   activeModality?: 'voice' | 'code' | 'canvas' | 'scenario';
   sessionId?: string;
+  timeRemainingSeconds?: number | null;
+  activeRole?: string;
+  activePhase?: string;
+  demoProgress?: { roles: string[]; answeredRoles: string[]; closing: boolean } | null;
 };
 
 export function QuickstartConversationLayout({
@@ -25,6 +29,10 @@ export function QuickstartConversationLayout({
   onEndConversation,
   activeModality = 'voice',
   sessionId,
+  timeRemainingSeconds,
+  activeRole = 'technical',
+  activePhase = 'introduction',
+  demoProgress,
 }: QuickstartConversationLayoutProps) {
   return (
     <div className="flex min-h-0 flex-1 flex-col text-left">
@@ -42,11 +50,24 @@ export function QuickstartConversationLayout({
               RoundTable AI Interview
             </span>
             <span className="text-[10px] font-semibold uppercase tracking-widest text-primary">AI interview panel</span>
+            <span className="text-[10px] capitalize tracking-wide text-muted-foreground">
+              {activePhase.replaceAll('_', ' ')} · {activeRole.replaceAll('_', ' ')}
+            </span>
             {pipelineMetrics}
           </div>
         </div>
 
         <div className="flex items-center gap-2 md:pr-1">
+          {demoProgress && (
+            <span className="text-xs text-muted-foreground" aria-live="polite">
+              {demoProgress.closing ? 'Panel complete' : `${demoProgress.answeredRoles.length}/${demoProgress.roles.length} roles answered`}
+            </span>
+          )}
+          {timeRemainingSeconds !== null && timeRemainingSeconds !== undefined && (
+            <span className="rounded-full border border-border px-3 py-1 text-xs tabular-nums text-muted-foreground">
+              {demoProgress ? 'Up to ' : ''}{Math.floor(timeRemainingSeconds / 60)}:{String(timeRemainingSeconds % 60).padStart(2, '0')}
+            </span>
+          )}
           {statusPanel}
           <Button
             variant="destructive"
@@ -78,7 +99,7 @@ export function QuickstartConversationLayout({
         </main>
 
         {/* Code Workspace */}
-        {activeModality !== 'voice' && sessionId && (
+        {(activeModality === 'code' || activeModality === 'canvas') && sessionId && (
           <section className="order-2 flex min-h-0 flex-1 flex-col lg:order-3 lg:border-l lg:border-border/80 lg:pl-6">
             <div className="flex h-full w-full py-3 md:pb-6">
               <InterviewWorkspace sessionId={sessionId} activeModality={activeModality} />

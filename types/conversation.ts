@@ -11,6 +11,7 @@ export interface AgoraTokenData {
   sessionId?: string;
   agentUid?: string;
   expiresAt?: string;
+  interviewEndsAt?: string;
 }
 
 export interface ClientStartRequest {

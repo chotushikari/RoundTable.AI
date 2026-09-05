@@ -71,6 +71,7 @@ function interviewFromRow(row: Record<string, unknown>): InterviewDefinitionReco
     mustAskQuestions: (row.must_ask_questions ?? []) as string[],
     mustCoverTopics: (row.must_cover_topics ?? []) as string[],
     durationMinutes: Number(row.duration_minutes),
+    demoMode: row.demo_mode === true,
     instructions: String(row.instructions ?? ''),
     status: row.status as InterviewDefinitionRecord['status'],
     plan: (row.plan as InterviewPlan | null) ?? null,
@@ -115,6 +116,7 @@ function sessionFromRow(row: Record<string, unknown>): InterviewSessionRecord {
     previousRole: (row.previous_role as InterviewSessionRecord['previousRole']) ?? null,
     consecutiveRoleTurns: Number(row.consecutive_role_turns ?? 0),
     currentModality: row.current_modality as InterviewSessionRecord['currentModality'],
+    phase: (row.phase as InterviewSessionRecord['phase']) ?? 'introduction',
     competencyState: row.competency_state as InterviewSessionRecord['competencyState'],
     askedMustAsk: (row.asked_must_ask ?? []) as string[],
     coveredTopics: (row.covered_topics ?? []) as string[],
@@ -133,16 +135,19 @@ function sessionPatch(patch: Partial<InterviewSessionRecord>): Record<string, un
     ['status', 'status'],
     ['connectionHealth', 'connection_health'],
     ['agoraAgentId', 'agora_agent_id'],
+    ['llmTokenHash', 'llm_token_hash'],
     ['activeRole', 'active_role'],
     ['previousRole', 'previous_role'],
     ['consecutiveRoleTurns', 'consecutive_role_turns'],
     ['currentModality', 'current_modality'],
+    ['phase', 'phase'],
     ['competencyState', 'competency_state'],
     ['askedMustAsk', 'asked_must_ask'],
     ['coveredTopics', 'covered_topics'],
     ['pendingQuestion', 'pending_question'],
     ['stateVersion', 'state_version'],
     ['toolRunCount', 'tool_run_count'],
+    ['startedAt', 'started_at'],
     ['completedAt', 'completed_at'],
   ];
   for (const [source, destination] of fields) {
@@ -186,6 +191,7 @@ export const interviewStore = {
         must_ask_questions: input.mustAskQuestions,
         must_cover_topics: input.mustCoverTopics,
         duration_minutes: input.durationMinutes,
+        demo_mode: input.demoMode ?? false,
         instructions: input.instructions,
       })
       .select('*')
@@ -226,6 +232,20 @@ export const interviewStore = {
     const { data, error } = await query.maybeSingle();
     throwDatabase(error, 'get interview');
     return data ? interviewFromRow(data) : null;
+  },
+
+  async getOrganizationName(organizationId: string): Promise<string> {
+    const admin = getSupabaseAdmin();
+    if (!admin) {
+      return process.env.DEMO_COMPANY_NAME?.trim() || 'the hiring company';
+    }
+    const { data, error } = await admin
+      .from('organizations')
+      .select('name')
+      .eq('id', organizationId)
+      .maybeSingle();
+    throwDatabase(error, 'get organization');
+    return data?.name ? String(data.name) : 'the hiring company';
   },
 
   async setInterviewPlan(
@@ -281,6 +301,7 @@ export const interviewStore = {
         mustAskQuestions: interview.mustAskQuestions,
         mustCoverTopics: interview.mustCoverTopics,
         durationMinutes: interview.durationMinutes,
+        demoMode: interview.demoMode ?? false,
         instructions: interview.instructions,
       },
       plan: interview.plan,
@@ -469,6 +490,7 @@ export const interviewStore = {
           llm_token_hash: session.llmTokenHash,
           active_role: session.activeRole,
           current_modality: session.currentModality,
+          phase: session.phase,
           competency_state: session.competencyState,
           asked_must_ask: session.askedMustAsk,
           covered_topics: session.coveredTopics,
@@ -620,9 +642,12 @@ export const interviewStore = {
     };
     const admin = getSupabaseAdmin();
     if (!admin) {
-      const duplicate = await this.findTurnByDedupeKey(input.sessionId, input.dedupeKey);
+      // Keep the memory reservation synchronous, matching the database RPC's
+      // atomic uniqueness guarantee when overlapping ASR requests arrive.
+      const turns = [...memory().turns.values()].filter((turn) => turn.sessionId === input.sessionId);
+      const duplicate = turns.find((turn) => turn.dedupeKey === input.dedupeKey);
       if (duplicate) return duplicate;
-      const localRecord = { ...record, sequence: (await this.listTurns(input.sessionId)).length + 1 };
+      const localRecord = { ...record, sequence: turns.length + 1 };
       memory().turns.set(localRecord.id, localRecord);
       return localRecord;
     }

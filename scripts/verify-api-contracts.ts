@@ -55,10 +55,20 @@ async function verifyAdaptiveLlmAuthentication() {
   assert(response.status === 401, 'adaptive LLM endpoint must require its per-session bearer credential');
 }
 
+async function verifyCandidateAgentStartAuthentication() {
+  const { POST } = await import('../app/api/sessions/[id]/start/route');
+  const response = await POST(
+    new Request('http://localhost/api/sessions/missing/start', { method: 'POST' }),
+    { params: Promise.resolve({ id: '00000000-0000-4000-8000-000000000099' }) },
+  );
+  assert(response.status === 401, 'candidate agent start endpoint must require its signed session cookie');
+}
+
 async function main() {
   await verifyCombinedToken();
   await verifyLegacyAgentBoundary();
   await verifyAdaptiveLlmAuthentication();
+  await verifyCandidateAgentStartAuthentication();
   console.log('API contract checks passed');
 }
 

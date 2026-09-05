@@ -13,6 +13,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
     if (Date.parse(invitation.expiresAt) <= Date.now()) throw new Error('Invitation has expired');
     const version = await interviewStore.getInterviewVersion(invitation.interviewVersionId);
     if (!version) throw new Error('Interview version not found');
+    const companyName = await interviewStore.getOrganizationName(invitation.organizationId);
     let existingSession: { id: string; status: string } | null = null;
     if (invitation.claimedAt) {
       const claimedSession = await interviewStore.getSessionByInvitation(invitation.id);
@@ -23,7 +24,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
     }
     return NextResponse.json({
       roleTitle: version.definition.roleTitle,
+      companyName,
       durationMinutes: version.definition.durationMinutes,
+      demoMode: version.definition.demoMode ?? false,
       panelRoles: version.definition.panelRoles,
       expiresAt: invitation.expiresAt,
       alreadyUsed: Boolean(invitation.claimedAt),
@@ -34,7 +37,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
         humanReviewRequired: true,
         rawMediaRecorded: false,
       },
-    });
+    }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     return apiError(error, 'Failed to load invitation');
   }

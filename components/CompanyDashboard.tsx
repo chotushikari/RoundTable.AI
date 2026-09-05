@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createClient, type Session } from '@supabase/supabase-js';
+import { DEMO_DURATION_MINUTES, DEMO_ROLES } from '@/lib/interview-demo';
 
 type Interview = { id: string; title: string; roleTitle: string; status: string; createdAt: string };
 type SessionSummary = { id: string; status: string; health: string; startedAt: string; completedAt: string | null; interviewId: string };
 
 export function CompanyDashboard() {
   const supabase = useMemo(() => {
+    if (process.env.NEXT_PUBLIC_DEMO_MODE === 'true') return null;
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
     return url && key ? createClient(url, key) : null;
@@ -83,7 +85,15 @@ export function CompanyDashboard() {
     const response = await fetch('/api/interviews', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders },
-      body: JSON.stringify({ roleTitle, jdText, desiredOutcomes: outcomes.split('\n').filter(Boolean), panelRoles: ['technical', 'product', 'hiring_manager'], mustAskQuestions: [], durationMinutes: 30 }),
+      body: JSON.stringify({
+        roleTitle,
+        jdText,
+        desiredOutcomes: outcomes.split('\n').filter(Boolean),
+        panelRoles: DEMO_ROLES,
+        mustAskQuestions: [],
+        durationMinutes: DEMO_DURATION_MINUTES,
+        demoMode: true,
+      }),
     });
     const data = await response.json();
     if (!response.ok) { setMessage(data.error); return; }
@@ -123,7 +133,17 @@ export function CompanyDashboard() {
     <main className="mx-auto max-w-5xl space-y-8 p-6">
       <header><h1 className="text-3xl font-semibold">RoundTable company dashboard</h1><p className="mt-2 text-sm text-muted-foreground">Create adaptive interviews. Live sessions expose status and health only.</p></header>
       {message.includes('membership') && <section className="rounded border p-4"><h2 className="font-semibold">Create your organization</h2><input value={organizationName} onChange={(event) => setOrganizationName(event.target.value)} className="mt-3 rounded border p-2 text-black" placeholder="Organization name"/><button onClick={createOrganization} className="ml-2 rounded bg-primary px-3 py-2 text-primary-foreground">Create</button></section>}
-      <section className="grid gap-3 rounded border p-5"><h2 className="text-xl font-semibold">New interview</h2><input value={roleTitle} onChange={(event) => setRoleTitle(event.target.value)} className="rounded border p-2 text-black"/><textarea value={jdText} onChange={(event) => setJdText(event.target.value)} rows={5} className="rounded border p-2 text-black"/><textarea value={outcomes} onChange={(event) => setOutcomes(event.target.value)} rows={3} className="rounded border p-2 text-black"/><button onClick={createInterview} className="w-fit rounded bg-primary px-4 py-2 text-primary-foreground">Create and generate plan</button></section>
+      <section className="grid gap-3 rounded border p-5">
+        <div>
+          <h2 className="text-xl font-semibold">New interview</h2>
+          <p className="mt-1 text-xs text-muted-foreground">Panel demo: one project, five roles. Aim for about 3 minutes with brief answers; up to 5 minutes for pauses.</p>
+          <p className="mt-1 text-xs text-muted-foreground">Hiring Manager → Technical → Product Manager → Customer → Behavioural. Ends after all five answers.</p>
+        </div>
+        <input value={roleTitle} onChange={(event) => setRoleTitle(event.target.value)} className="rounded border p-2 text-black"/>
+        <textarea value={jdText} onChange={(event) => setJdText(event.target.value)} rows={5} className="rounded border p-2 text-black"/>
+        <textarea value={outcomes} onChange={(event) => setOutcomes(event.target.value)} rows={3} className="rounded border p-2 text-black"/>
+        <button onClick={createInterview} className="w-fit rounded bg-primary px-4 py-2 text-primary-foreground">Create and generate plan</button>
+      </section>
       <p className="break-all rounded bg-muted p-3 text-sm">{message}</p>
       <section><h2 className="text-xl font-semibold">Interviews</h2><div className="mt-3 grid gap-3">{interviews.map((item) => <article key={item.id} className="rounded border p-4"><div className="flex items-center justify-between"><div><div className="font-medium">{item.title}</div><div className="text-xs text-muted-foreground">{item.status}</div></div><button disabled={item.status !== 'ready'} onClick={() => publish(item.id)} className="rounded border px-3 py-2 text-sm disabled:opacity-40">Publish invitation</button></div><div className="mt-3 space-y-2">{sessions.filter((entry) => entry.interviewId === item.id).map((entry) => <div key={entry.id} className="flex items-center justify-between rounded bg-muted px-3 py-2 text-xs"><span>{entry.status} · {entry.health}</span>{entry.status === 'completed' && <button onClick={() => viewResult(entry.id)} className="underline">View evidence report</button>}</div>)}</div></article>)}</div></section>
       {selectedResult && <section className="rounded border p-4"><div className="flex items-center justify-between"><h2 className="font-semibold">Completed interview evidence</h2><button onClick={releaseFeedback} className="rounded border px-3 py-2 text-xs">Release candidate summary</button></div><pre className="mt-3 max-h-[32rem] overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(selectedResult, null, 2)}</pre></section>}

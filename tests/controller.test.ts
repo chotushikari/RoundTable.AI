@@ -1,8 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { chooseNextDecision, updateCompetencyState, validateEvidence } from '@/lib/interview-controller';
+import {
+  chooseNextDecision,
+  classifyCandidateConversationControl,
+  demoQuestionForRole,
+  updateCompetencyState,
+  validateEvidence,
+} from '@/lib/interview-controller';
 import { buildFallbackPlan } from '@/lib/interview-planner';
-import type { InterviewDefinitionRecord, InterviewSessionRecord, PanelTurnAnalysis } from '@/types/interview';
+import type { InterviewDefinitionRecord, InterviewSessionRecord, PanelRole, PanelTurnAnalysis, TurnAnalysisRecord } from '@/types/interview';
 
 const interview: InterviewDefinitionRecord = {
   id: '00000000-0000-4000-8000-000000000010',
@@ -43,6 +49,7 @@ function session(overrides: Partial<InterviewSessionRecord> = {}): InterviewSess
     previousRole: null,
     consecutiveRoleTurns: 1,
     currentModality: 'voice',
+    phase: 'panel',
     competencyState: {},
     askedMustAsk: [],
     coveredTopics: [],
@@ -74,6 +81,27 @@ function analysis(overrides: Partial<PanelTurnAnalysis> = {}): PanelTurnAnalysis
     addressedTopics: [],
     toolRequest: null,
     ...overrides,
+  };
+}
+
+function priorRole(role: PanelRole): TurnAnalysisRecord {
+  return {
+    id: crypto.randomUUID(),
+    sessionId: session().id,
+    turnId: crypto.randomUUID(),
+    analysis: analysis(),
+    decision: {
+      activeSpeakerRole: role,
+      objective: 'Prior question',
+      modality: 'voice',
+      difficulty: 3,
+      reasonCode: 'panel_coverage',
+      remainingCoverage: [],
+      roleHandoff: true,
+    },
+    responseText: 'Prior question',
+    model: 'test',
+    createdAt: new Date().toISOString(),
   };
 }
 
@@ -125,16 +153,98 @@ test('mandatory questions are selected once before ordinary rotation', () => {
   assert.equal(result.objective, withRequired.mustAskQuestions[0]);
 });
 
-test('an interrupted question is rephrased before coverage advances', () => {
+test('brief pause and repeat requests are handled as conversation controls', () => {
+  assert.equal(classifyCandidateConversationControl('Wait, let me think.'), 'pause');
+  assert.equal(classifyCandidateConversationControl('Could you repeat the question?'), 'repeat');
+  assert.equal(classifyCandidateConversationControl("I'm ready"), 'repeat');
+  assert.equal(classifyCandidateConversationControl('I waited for the cache and then measured latency because the database was slow.'), null);
+});
+
+test('the interview starts with background before role-specific panel questions', () => {
   const result = chooseNextDecision({
-    session: session({ pendingQuestion: '[interrupted] How would you invalidate the cache?' }),
+    session: session({ phase: 'introduction', consecutiveRoleTurns: 0 }),
     interview,
     plan,
     priorAnalyses: [],
-    analysis: analysis(),
+    analysis: analysis({ vague: true }),
   });
-  assert.equal(result.reasonCode, 'fallback');
-  assert.match(result.objective, /Rephrase the interrupted question/);
+  assert.equal(result.reasonCode, 'background');
+  assert.equal(result.activeSpeakerRole, 'hiring_manager');
+});
+
+test('two-minute demo rotates through every configured panel role', () => {
+  const demoInterview = {
+    ...interview,
+    durationMinutes: 2,
+    panelRoles: ['hiring_manager', 'technical', 'product', 'customer', 'behavioral'] as PanelRole[],
+  };
+  const afterBackground = chooseNextDecision({
+    session: session({ phase: 'background', activeRole: 'hiring_manager' }),
+    interview: demoInterview,
+    plan,
+    priorAnalyses: [priorRole('hiring_manager')],
+    analysis: analysis({ vague: true }),
+  });
+  assert.equal(afterBackground.activeSpeakerRole, 'technical');
+  assert.equal(afterBackground.reasonCode, 'panel_coverage');
+
+  const afterTechnical = chooseNextDecision({
+    session: session({ phase: 'panel', activeRole: 'technical' }),
+    interview: demoInterview,
+    plan,
+    priorAnalyses: [priorRole('hiring_manager'), priorRole('technical')],
+    analysis: analysis({ vague: true }),
+  });
+  assert.equal(afterTechnical.activeSpeakerRole, 'product');
+  assert.equal(afterTechnical.reasonCode, 'panel_coverage');
+
+  const afterProduct = chooseNextDecision({
+    session: session({ phase: 'panel', activeRole: 'product' }),
+    interview: demoInterview,
+    plan,
+    priorAnalyses: [priorRole('hiring_manager'), priorRole('technical'), priorRole('product')],
+    analysis: analysis({ vague: true }),
+  });
+  assert.equal(afterProduct.activeSpeakerRole, 'customer');
+  assert.equal(afterProduct.reasonCode, 'panel_coverage');
+
+  const afterCustomer = chooseNextDecision({
+    session: session({ phase: 'panel', activeRole: 'customer' }),
+    interview: demoInterview,
+    plan,
+    priorAnalyses: [priorRole('hiring_manager'), priorRole('technical'), priorRole('product'), priorRole('customer')],
+    analysis: analysis({
+      vague: true,
+      contradictions: [{
+        priorTurnId: crypto.randomUUID(),
+        priorQuote: 'I owned the service.',
+        currentQuote: 'I did not own the service.',
+        explanation: 'Ownership changed.',
+      }],
+    }),
+  });
+  assert.equal(afterCustomer.activeSpeakerRole, 'behavioral');
+  assert.equal(afterCustomer.reasonCode, 'panel_coverage');
+});
+
+test('two-minute role prompts are short and include product impact and customer role-play', () => {
+  const roles: PanelRole[] = ['hiring_manager', 'technical', 'product', 'customer', 'behavioral'];
+  for (const role of roles) {
+    assert.ok(demoQuestionForRole(role).split(/\s+/).length <= 15, `${role} prompt is too long`);
+  }
+  assert.match(demoQuestionForRole('product'), /customer|business/i);
+  assert.match(demoQuestionForRole('customer'), /as the customer/i);
+});
+
+test('showcase Product prompt adapts to missing versus supplied customer impact', () => {
+  const missing = demoQuestionForRole('product', analysis({ roleFindings: [
+    { role: 'technical', observations: [], strengths: ['Implementation explained'], gaps: [] },
+    { role: 'product', observations: [], strengths: [], gaps: ['No customer outcome'] },
+  ] }));
+  const supplied = demoQuestionForRole('product', analysis());
+  assert.match(missing, /Which customer outcome/);
+  assert.match(supplied, /verify.*caused/);
+  assert.notEqual(missing, supplied);
 });
 
 test('two consistent low-confidence performance signals lower difficulty by only one', () => {

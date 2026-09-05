@@ -10,6 +10,8 @@ import {
   MiniMaxTTS,
 } from 'agora-agents';
 import { DEFAULT_AGENT_UID } from '@/lib/agora';
+import type { PanelRole } from '@/types/interview';
+import { DEMO_OPENING_QUESTION } from '@/lib/interview-demo';
 
 const TOKEN_TTL_SECONDS = 3_600;
 
@@ -59,19 +61,43 @@ export async function startInterviewAgent({
   channel,
   rtcUid,
   llmToken,
+  roleTitle = 'Software Engineer',
+  companyName = 'the hiring company',
+  panelRoles = ['technical'],
+  durationMinutes = 30,
+  demoMode = false,
 }: {
   sessionId: string;
   channel: string;
   rtcUid: string;
   llmToken: string;
+  roleTitle?: string;
+  companyName?: string;
+  panelRoles?: PanelRole[];
+  durationMinutes?: number;
+  demoMode?: boolean;
 }): Promise<string> {
   const client = new AgoraClient({
     area: Area.AP,
     appId: requireAgoraEnv('NEXT_PUBLIC_AGORA_APP_ID'),
     appCertificate: requireAgoraEnv('NEXT_AGORA_APP_CERTIFICATE'),
   });
-  const greeting = `Hello. This is RoundTable, an AI interview panel. I will ask adaptive questions and a human will review the transcript and evidence before making any decision. This interview is retained for 30 days. Let's begin: please briefly introduce yourself and the experience most relevant to this role.`;
-  const instructions = `You are the voice executor for RoundTable's AI interview panel. The application-controlled custom LLM selects exactly one panel role and one question per turn. Speak its text faithfully and concisely. Never claim to be human. Never make a hire or reject decision. Allow the candidate to interrupt naturally.`;
+  const roleNames: Record<PanelRole, string> = {
+    technical: 'technical interviewer',
+    product: 'product manager',
+    hiring_manager: 'hiring manager',
+    behavioral: 'behavioural interviewer',
+    customer: 'customer',
+  };
+  const formattedRoles = new Intl.ListFormat('en', { style: 'long', type: 'conjunction' })
+    .format(panelRoles.map((role) => roleNames[role]));
+  const paceGuidance = durationMinutes <= 2
+    ? 'Please keep each answer to about ten seconds so every panel member can speak.'
+    : 'Take the time you need to answer clearly.';
+  const greeting = demoMode
+    ? `Hi! This is an AI interview for ${roleTitle} at ${companyName}, with ${formattedRoles}. One project, five perspectives. Take your time with each answer. A human reviews the summary. ${DEMO_OPENING_QUESTION}`
+    : `Hi. This is a technical interview for the role of ${roleTitle} at ${companyName}. You are speaking with an AI interview panel: ${formattedRoles}. We will start with a brief introduction and background, then each interviewer will ask one focused question. This ${durationMinutes}-minute interview is reviewed by a human. ${paceGuidance} Please introduce yourself and share the experience most relevant to this role.`;
+  const instructions = `You are the voice executor for RoundTable's AI interview panel. The application-controlled custom LLM selects exactly one panel role and one question per turn. Speak its text faithfully, warmly, and concisely. Never claim to be human. Never make a hire or reject decision. Allow the candidate to interrupt naturally. When the candidate asks for a moment to think, acknowledge it calmly and do not advance the interview.`;
 
   const agent = new Agent({
     client,
@@ -88,7 +114,7 @@ export async function startInterviewAgent({
         },
         end_of_speech: {
           mode: 'vad',
-          vad_config: { silence_duration_ms: 480 },
+          vad_config: { silence_duration_ms: demoMode ? 1500 : 480 },
         },
       },
     },
@@ -116,7 +142,7 @@ export async function startInterviewAgent({
     channel,
     agentUid: String(DEFAULT_AGENT_UID),
     remoteUids: [rtcUid],
-    idleTimeout: 30,
+    idleTimeout: Math.max(60, durationMinutes * 60 + 30),
     expiresIn: ExpiresIn.hours(1),
     debug: false,
   });

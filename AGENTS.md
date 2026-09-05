@@ -64,7 +64,7 @@ The sections below (Start Here, Patterns, Anti-Patterns, etc.) remain the canoni
 - `app/api/ai/chat/completions/route.ts`: per-session authenticated OpenAI-compatible adaptive controller used by Agora.
 - `app/api/interviews/`: company definition, plan, version, publication, and status routes.
 - `app/api/invitations/`: public invitation preview and consent-gated guest session bootstrap.
-- `app/api/sessions/`: authenticated lifecycle, event, artifact, tool, results, and release routes.
+- `app/api/sessions/`: authenticated lifecycle, background agent start, event, artifact, tool, results, and release routes.
 - `app/api/mcp/[grant]/route.ts`: session-scoped Streamable HTTP workspace tools.
 - `app/api/webhooks/agora/route.ts`: signed lifecycle reconciliation and finalization.
 - `components/LandingPage.tsx`: session bootstrap, RTM setup, provider wiring, and conversation lifecycle.
@@ -141,6 +141,8 @@ useEffect(() => {
 - Keep token generation on `RtcTokenBuilder.buildTokenWithRtm`.
 - Keep transcript UID remapping aligned with the toolkit sentinel behavior.
 - Do not require third-party vendor API keys unless the code actually introduces a BYOK provider path.
+- Keep Groq planner/evaluator/speaker/assessment models independently configurable, and cap structured completion tokens so fallback-safe demo calls do not reserve unbounded daily quota.
+- Keep final narrative generation limited to a bounded verified-evidence packet; do not duplicate full transcripts, analyses, rubric, and fallback reports in its prompt. Model narratives must not replace authoritative ratings or evidence. Honor provider `Retry-After` across purposes sharing the same model/key; process-local cooldown is not a distributed quota guarantee.
 - Keep README, AGENTS, and `docs/ai/` aligned with implementation changes.
 
 ## Commands
@@ -190,6 +192,9 @@ npm run build
 - Do not publish transcript, answers, artifacts, scores, or assessment tables through Realtime; publish only `company_session_status`.
 - Do not use resume claims as evidence. Resume text may only seed verification questions.
 - Do not emit automatic hire/reject decisions; every final assessment must keep `humanReviewRequired: true`.
+- Keep introduction, background, panel, and wrap-up phase ownership on the server; pause/repeat utterances must not advance assessment state.
+- Demo progression requires a matching completed-question transport receipt. Group answer fragments by server-owned pending question; incomplete phrases and introduction-only replies must not advance coverage. Reserve one accepted answer per question atomically, including in the local memory store. Keep the demo silence window at 1500 ms and preserve the fast start-of-speech interruption threshold.
+- New showcases use explicit `demoMode`, frozen with the published definition, with all five roles and a five-minute maximum. Combine introduction/background in the Hiring Manager greeting, then Technical, Product Manager, Customer, and Behavioural. Finish after five substantive answers and the spoken closing; pause/repeat/readiness controls must not count. Candidate progress counts answered roles, not generated questions. Existing two-minute invitations retain their legacy policy; normal interviews retain adaptive priorities.
 
 ## Done Criteria
 

@@ -2,8 +2,14 @@ import { createHash, randomUUID } from 'crypto';
 import { NextResponse } from 'next/server';
 import { requireLlmSession } from '@/lib/api-auth';
 import { apiError } from '@/lib/http';
-import { processCandidateTurn } from '@/lib/interview-controller';
+import {
+  classifyCandidateConversationControl,
+  processCandidateTurn,
+  processConversationControlTurn,
+} from '@/lib/interview-controller';
 import { interviewStore } from '@/lib/interview-store';
+import { DEMO_CLOSING } from '@/lib/interview-demo';
+import { processDemoAnswer } from '@/lib/demo-turns';
 
 type ChatMessage = { role?: string; content?: unknown };
 type ChatBody = { messages?: ChatMessage[]; stream?: boolean; model?: string; [key: string]: unknown };
@@ -43,6 +49,10 @@ export async function POST(request: Request) {
   try {
     const session = await requireLlmSession(request);
     if (!['ready', 'in_progress'].includes(session.status)) throw new Error('Session is not active');
+    if (session.phase === 'wrap_up') {
+      const version = await interviewStore.getInterviewVersion(session.interviewVersionId);
+      if (version?.definition.demoMode) return sseResponse(DEMO_CLOSING);
+    }
     let body: ChatBody;
     try { body = await request.json(); } catch { return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 }); }
     const messages = Array.isArray(body.messages) ? body.messages : [];
@@ -51,6 +61,20 @@ export async function POST(request: Request) {
     if (!answer) throw new Error('A candidate answer is required');
     // Caller-provided system messages and model names are intentionally ignored.
     const contextId = createHash('sha256').update(JSON.stringify(messages.slice(-6))).digest('hex');
+    const control = classifyCandidateConversationControl(answer);
+    if (control) {
+      const responseText = await processConversationControlTurn({
+        session,
+        answer,
+        control,
+        upstreamTurnId: contextId,
+      });
+      return sseResponse(responseText);
+    }
+    const version = await interviewStore.getInterviewVersion(session.interviewVersionId);
+    if (version?.definition.demoMode) {
+      return sseResponse(await processDemoAnswer({ session, answer, upstreamTurnId: contextId }));
+    }
     const result = await processCandidateTurn({ session, answer, upstreamTurnId: contextId });
     await interviewStore.appendEvent(session.id, 'llm.response_ready', {
       durationMs: Date.now() - receivedAt,

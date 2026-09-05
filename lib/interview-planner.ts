@@ -1,4 +1,4 @@
-import { configuredGeminiModel, generateGeminiJson } from '@/lib/gemini';
+import { configuredGeminiModel, generateGeminiJson, logGroqFallback } from '@/lib/gemini';
 import type { InterviewDefinitionRecord, InterviewPlan, PanelRole } from '@/types/interview';
 import { InterviewPlanSchema } from '@/types/interview';
 
@@ -79,7 +79,7 @@ export async function generateInterviewPlan(
 ): Promise<{ plan: InterviewPlan; model: string; usedFallback: boolean }> {
   const model = configuredGeminiModel('planner');
   const fallback = buildFallbackPlan(interview);
-  if (!process.env.GEMINI_API_KEY) return { plan: fallback, model: 'deterministic-fallback', usedFallback: true };
+  if (!process.env.GROQ_API_KEY) return { plan: fallback, model: 'deterministic-fallback', usedFallback: true };
 
   try {
     const plan = await generateGeminiJson({
@@ -99,7 +99,7 @@ export async function generateInterviewPlan(
     });
     return { plan, model, usedFallback: false };
   } catch (error) {
-    console.error('[planner] structured generation failed; using fallback', error);
+    logGroqFallback('planner', 'using the deterministic plan', error);
     return { plan: fallback, model: 'deterministic-fallback', usedFallback: true };
   }
 }

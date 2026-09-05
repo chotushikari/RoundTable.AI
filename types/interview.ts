@@ -23,9 +23,18 @@ export type Difficulty = z.infer<typeof DifficultySchema>;
 export const ModalitySchema = z.enum(['voice', 'code', 'canvas', 'scenario']);
 export type InterviewModality = z.infer<typeof ModalitySchema>;
 
+export const InterviewPhaseSchema = z.enum([
+  'introduction',
+  'background',
+  'panel',
+  'wrap_up',
+]);
+export type InterviewPhase = z.infer<typeof InterviewPhaseSchema>;
+
 export const InterviewStatusSchema = z.enum([
   'draft',
   'ready',
+  'starting',
   'in_progress',
   'assessing',
   'completed',
@@ -53,8 +62,13 @@ export const InterviewCreateSchema = z.object({
     .array(z.string().trim().min(2).max(240))
     .max(16)
     .default([]),
-  durationMinutes: z.number().int().min(15).max(90).default(30),
+  durationMinutes: z.number().int().min(2).max(90).default(30),
+  demoMode: z.boolean().optional(),
   instructions: z.string().trim().max(4_000).default(''),
+}).superRefine((value, context) => {
+  if (value.demoMode && new Set(value.panelRoles).size !== PANEL_ROLES.length) {
+    context.addIssue({ code: 'custom', path: ['panelRoles'], message: 'The showcase requires all five panel roles.' });
+  }
 });
 export type InterviewCreateInput = z.infer<typeof InterviewCreateSchema>;
 
@@ -158,6 +172,9 @@ export const ControllerDecisionSchema = z.object({
     'cross_functional_gap',
     'workspace_follow_up',
     'resume_verification',
+    'background',
+    'panel_coverage',
+    'conversation_control',
     'balanced_rotation',
     'wrap_up',
     'fallback',
@@ -270,6 +287,7 @@ export interface InterviewSessionRecord {
   previousRole: PanelRole | null;
   consecutiveRoleTurns: number;
   currentModality: InterviewModality;
+  phase: InterviewPhase;
   competencyState: CompetencyState;
   askedMustAsk: string[];
   coveredTopics: string[];

@@ -17,6 +17,7 @@ import {
   AgentState,
   MessageSalStatus,
   TranscriptHelperMode,
+  TurnStatus,
   type TranscriptHelperItem,
   type UserTranscription,
   type AgentTranscription,
@@ -44,6 +45,7 @@ import {
 } from './QuickstartPipelineMetrics';
 import { QuickstartTranscriptPanel } from './QuickstartTranscriptPanel';
 import type { ConversationComponentProps } from '@/types/conversation';
+import { DEMO_CLOSING, normalizeSpokenText } from '@/lib/interview-demo';
 
 // Cap the displayed issues list to avoid overwhelming the UI during a cascade of errors.
 const MAX_CONNECTION_ISSUES = 6;
@@ -104,6 +106,16 @@ export default function ConversationComponent({
   const [isAgentConnected, setIsAgentConnected] = useState(false);
   const [isConnectionDetailsOpen, setIsConnectionDetailsOpen] = useState(false);
   const [activeModality, setActiveModality] = useState<'voice' | 'code' | 'canvas' | 'scenario'>('voice');
+  const [activeRole, setActiveRole] = useState('technical');
+  const [activePhase, setActivePhase] = useState('introduction');
+  const [timeRemainingSeconds, setTimeRemainingSeconds] = useState<number | null>(null);
+  const autoEndTriggeredRef = useRef(false);
+  const interruptedTurnIdsRef = useRef(new Set<number>());
+  const [demoProgress, setDemoProgress] = useState<{ roles: string[]; answeredRoles: string[]; closing: boolean } | null>(null);
+  const [serverDeadline, setServerDeadline] = useState<string | null>(null);
+  const [pendingDemoQuestion, setPendingDemoQuestion] = useState<{ id: string; text: string } | null>(null);
+  const deliveredQuestionsRef = useRef(new Set<string>());
+  const finishedAgentTurnsRef = useRef(new Set<number>());
 
   const logEvent = useCallback((type: 'AGENT_STATE_CHANGED' | 'METRICS' | 'ERROR' | 'CONNECTION_STATE' | 'INTERRUPTED', payload: Record<string, unknown>) => {
     if (!agoraData.sessionId) return;
@@ -121,6 +133,13 @@ export default function ConversationComponent({
       .then((data) => {
         const modality = data?.session?.currentModality;
         if (['voice', 'code', 'canvas', 'scenario'].includes(modality)) setActiveModality(modality);
+        if (typeof data?.session?.activeRole === 'string') setActiveRole(data.session.activeRole);
+        if (typeof data?.session?.phase === 'string') setActivePhase(data.session.phase);
+        if (data?.session) {
+          setDemoProgress(data.session.demo ?? null);
+          setPendingDemoQuestion(data.session.demo?.pendingQuestion ?? null);
+          setServerDeadline(data.session.interviewEndsAt ?? null);
+        }
       })
       .catch(() => {});
     refresh();
@@ -264,6 +283,11 @@ export default function ConversationComponent({
           setAgentState(event.state);
           logEvent('AGENT_STATE_CHANGED', { state: event.state });
         });
+        ai.on(AgoraVoiceAIEvents.AGENT_INTERRUPTED, (_, event) => {
+          if (interruptedTurnIdsRef.current.has(event.turnID)) return;
+          interruptedTurnIdsRef.current.add(event.turnID);
+          logEvent('INTERRUPTED', { turnId: event.turnID });
+        });
         ai.on(AgoraVoiceAIEvents.AGENT_METRICS, (_, metrics) => {
           setAgentMetrics((prev) => [...prev, metrics].slice(-8));
           logEvent('METRICS', { metrics });
@@ -399,6 +423,37 @@ export default function ConversationComponent({
   // messageList stays empty and the first interrupted turn is never shown.
   const messageList = useMemo(() => getMessageList(transcript), [transcript]);
 
+  useEffect(() => {
+    if (['listening', 'idle', 'silent'].includes(agentState ?? '')) {
+      for (const turn of transcript) {
+        if (String(turn.uid) === agentUID && turn.status === TurnStatus.END) finishedAgentTurnsRef.current.add(turn.turn_id);
+      }
+    }
+    if (!agoraData.sessionId || !pendingDemoQuestion || deliveredQuestionsRef.current.has(pendingDemoQuestion.id)) return;
+    const completed = transcript.find((turn) => String(turn.uid) === agentUID
+      && turn.status === TurnStatus.END
+      && finishedAgentTurnsRef.current.has(turn.turn_id)
+      && normalizeSpokenText(String(turn.text)).includes(normalizeSpokenText(pendingDemoQuestion.text)));
+    if (!completed) return;
+    let cancelled = false;
+    // Retry a lost receipt even when the transcript is no longer changing.
+    const acknowledge = async () => {
+      if (cancelled || deliveredQuestionsRef.current.has(pendingDemoQuestion.id)) return;
+      try {
+        const response = await fetch(`/api/sessions/${agoraData.sessionId}/events`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'QUESTION_DELIVERED', payload: {
+            questionId: pendingDemoQuestion.id, text: String(completed.text),
+          } }),
+        });
+        if (response.ok) deliveredQuestionsRef.current.add(pendingDemoQuestion.id);
+      } catch { /* Retry while this question remains pending. */ }
+    };
+    void acknowledge();
+    const timer = window.setInterval(() => void acknowledge(), 1000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [agoraData.sessionId, pendingDemoQuestion, transcript, agentState, agentUID]);
+
   const lastLoggedTurnRef = useRef<number | null>(null);
 
   // Watch for new completed messages to log them
@@ -407,7 +462,11 @@ export default function ConversationComponent({
     const latestMessage = messageList[messageList.length - 1];
     
     if (latestMessage.turn_id !== lastLoggedTurnRef.current) {
-      if (String(latestMessage.status).toLocaleLowerCase().includes('interrupt')) {
+      if (
+        String(latestMessage.status).toLocaleLowerCase().includes('interrupt') &&
+        !interruptedTurnIdsRef.current.has(latestMessage.turn_id)
+      ) {
+        interruptedTurnIdsRef.current.add(latestMessage.turn_id);
         logEvent('INTERRUPTED', { turnId: latestMessage.turn_id });
       }
       lastLoggedTurnRef.current = latestMessage.turn_id;
@@ -515,10 +574,48 @@ export default function ConversationComponent({
     onEndConversation();
   }, [onEndConversation]);
 
+  useEffect(() => {
+    // Start the session clock once the agent startup has completed, not while
+    // the browser is still acquiring microphone/RTC credentials.
+    const deadline = agoraData.sessionId ? serverDeadline : agoraData.interviewEndsAt;
+    if (!deadline) return;
+    const updateTimer = () => {
+      const remaining = Math.max(0, Math.ceil((Date.parse(deadline) - Date.now()) / 1_000));
+      setTimeRemainingSeconds(remaining);
+      if (remaining === 0 && !autoEndTriggeredRef.current) {
+        autoEndTriggeredRef.current = true;
+        void handleEndConversation();
+      }
+    };
+    updateTimer();
+    const timer = window.setInterval(updateTimer, 500);
+    return () => window.clearInterval(timer);
+  }, [agoraData.interviewEndsAt, agoraData.sessionId, serverDeadline, handleEndConversation]);
+
+  useEffect(() => {
+    if (!demoProgress?.closing || autoEndTriggeredRef.current) return;
+    const closingDelivered = transcript.some((turn) => String(turn.uid) === agentUID
+      && turn.status === TurnStatus.END
+      && String(turn.text).replace(/[^a-z]/gi, '').toLowerCase().includes(DEMO_CLOSING.replace(/[^a-z]/gi, '').toLowerCase()));
+    if (!closingDelivered || !['listening', 'idle', 'silent'].includes(agentState ?? '')) return;
+    // Wait for both the closing transcript and the end of agent speech.
+    // An interrupted closing stays open and can be repeated naturally.
+    const timer = window.setTimeout(() => {
+      if (autoEndTriggeredRef.current) return;
+      autoEndTriggeredRef.current = true;
+      void handleEndConversation();
+    }, 1_000);
+    return () => window.clearTimeout(timer);
+  }, [agentState, agentUID, demoProgress?.closing, handleEndConversation, transcript]);
+
   return (
     <QuickstartConversationLayout
       activeModality={activeModality}
+      activeRole={activeRole}
+      activePhase={activePhase}
       sessionId={agoraData.sessionId}
+      timeRemainingSeconds={timeRemainingSeconds}
+      demoProgress={demoProgress}
       statusPanel={
         <ConnectionStatusPanel
           connectionState={connectionState}

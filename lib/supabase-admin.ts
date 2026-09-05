@@ -2,6 +2,10 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 let adminClient: SupabaseClient | null | undefined;
 
+export function isDemoMode(): boolean {
+  return process.env.NODE_ENV !== 'production' && process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
+}
+
 export function hasSupabaseConfig(): boolean {
   return Boolean(
     process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SECRET_KEY,
@@ -10,6 +14,11 @@ export function hasSupabaseConfig(): boolean {
 
 export function getSupabaseAdmin(): SupabaseClient | null {
   if (adminClient !== undefined) return adminClient;
+
+  if (isDemoMode()) {
+    adminClient = null;
+    return adminClient;
+  }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const secret = process.env.SUPABASE_SECRET_KEY;

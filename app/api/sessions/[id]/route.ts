@@ -3,6 +3,8 @@ import { requireCandidateSession } from '@/lib/api-auth';
 import { apiError } from '@/lib/http';
 import { interviewStore } from '@/lib/interview-store';
 import { requireCompanyContext } from '@/lib/supabase-admin';
+import { answeredDemoRoles, demoRoles } from '@/lib/interview-demo';
+import { demoQuestion } from '@/lib/demo-turns';
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -32,6 +34,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
     await requireCandidateSession(request, id);
     const assessment = await interviewStore.getAssessment(id);
+    const version = await interviewStore.getInterviewVersion(session.interviewVersionId);
+    const demo = version?.definition.demoMode ? {
+      roles: demoRoles(version.definition.panelRoles),
+      answeredRoles: answeredDemoRoles(version.definition.panelRoles, await interviewStore.listAnalyses(id)),
+      closing: session.phase === 'wrap_up',
+      pendingQuestion: demoQuestion(session),
+    } : null;
     return NextResponse.json({
       session: {
         id,
@@ -39,6 +48,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         completedAt: session.completedAt,
         activeRole: session.activeRole,
         currentModality: session.currentModality,
+        phase: session.phase,
+        demo,
+        interviewEndsAt: version && session.status === 'in_progress'
+          ? new Date(Date.parse(session.startedAt) + version.definition.durationMinutes * 60_000).toISOString()
+          : null,
       },
       feedback: assessment?.releasedAt ? assessment.assessment.candidateSummary : null,
       feedbackReleasedAt: assessment?.releasedAt ?? null,

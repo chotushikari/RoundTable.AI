@@ -56,8 +56,10 @@ const AgoraProvider = dynamic(
 
 type InvitationPreview = {
   roleTitle: string;
+  companyName: string;
   durationMinutes: number;
   panelRoles: string[];
+  demoMode?: boolean;
   existingSession?: { id: string; status: string } | null;
 };
 
@@ -80,10 +82,13 @@ export default function LandingPage({ invitationToken }: { invitationToken?: str
   const [completed, setCompleted] = useState(false);
   const [resumeText, setResumeText] = useState('');
   const [releasedFeedback, setReleasedFeedback] = useState<{ strengths: string[]; growthAreas: string[] } | null>(null);
+  const [isInvitationLoading, setIsInvitationLoading] = useState(Boolean(invitationToken));
+  const startInFlightRef = useRef(false);
+  const endInFlightRef = useRef(false);
 
   useEffect(() => {
     if (!invitationToken) return;
-    fetch(`/api/invitations/${encodeURIComponent(invitationToken)}`)
+    fetch(`/api/invitations/${encodeURIComponent(invitationToken)}`, { cache: 'no-store' })
       .then(async (response) => {
         const data = await response.json();
         if (!response.ok) throw new Error(data.error ?? 'Invitation could not be loaded');
@@ -95,17 +100,22 @@ export default function LandingPage({ invitationToken }: { invitationToken?: str
             .then((result) => setReleasedFeedback(result.feedback ?? null));
         }
       })
-      .catch((loadError) => setError(loadError instanceof Error ? loadError.message : 'Invitation could not be loaded'));
+      .catch((loadError) => setError(loadError instanceof Error ? loadError.message : 'Invitation could not be loaded'))
+      .finally(() => setIsInvitationLoading(false));
   }, [invitationToken]);
 
   const handleStartConversation = async () => {
+    if (startInFlightRef.current) return;
+    startInFlightRef.current = true;
     setIsLoading(true);
     setError(null);
     setAgentJoinError(false);
 
     try {
       if (invitationToken) {
-        const resumeId = invitation?.existingSession?.status === 'in_progress' ? invitation.existingSession.id : null;
+        const resumeId = invitation?.existingSession && ['ready', 'starting', 'in_progress'].includes(invitation.existingSession.status)
+          ? invitation.existingSession.id
+          : null;
         const sessionResponse = await fetch(resumeId
           ? `/api/sessions/${resumeId}/resume`
           : `/api/invitations/${encodeURIComponent(invitationToken)}/session`, {
@@ -115,6 +125,10 @@ export default function LandingPage({ invitationToken }: { invitationToken?: str
         });
         const responseData = await sessionResponse.json();
         if (!sessionResponse.ok) throw new Error(responseData.error ?? 'Failed to start interview');
+        const agentStartPromise = responseData.agentId
+          ? Promise.resolve({ ok: true, data: { agentId: responseData.agentId } })
+          : fetch(`/api/sessions/${responseData.sessionId}/start`, { method: 'POST' })
+            .then(async (response) => ({ ok: response.ok, data: await response.json() }));
         const { default: AgoraRTM } = await import('agora-rtm');
         const rtm: RTMClient = new AgoraRTM.RTM(
           process.env.NEXT_PUBLIC_AGORA_APP_ID!,
@@ -125,6 +139,19 @@ export default function LandingPage({ invitationToken }: { invitationToken?: str
         setRtmClient(rtm);
         setAgoraData({ ...responseData, uid: responseData.rtcUid, token: responseData.rtcToken });
         setShowConversation(true);
+        void agentStartPromise.then(({ ok, data }) => {
+          if (!ok) {
+            setAgentJoinError(true);
+            setError(data.error ?? 'The AI interviewer could not join.');
+            return;
+          }
+          if (data.agentId) {
+            setAgoraData((current) => current ? { ...current, agentId: data.agentId } : current);
+          }
+        }).catch((startError) => {
+          console.error('Failed to start interview agent:', startError);
+          setAgentJoinError(true);
+        });
         return;
       }
       // 1. Fetch RTC token + channel
@@ -188,6 +215,7 @@ export default function LandingPage({ invitationToken }: { invitationToken?: str
       console.error('Error starting conversation:', err);
     } finally {
       setIsLoading(false);
+      startInFlightRef.current = false;
     }
   };
 
@@ -235,6 +263,8 @@ export default function LandingPage({ invitationToken }: { invitationToken?: str
   );
 
   const handleEndConversation = async () => {
+    if (endInFlightRef.current) return;
+    endInFlightRef.current = true;
     if (agoraData?.sessionId) {
       try {
         await fetch(`/api/sessions/${agoraData.sessionId}/stop`, { method: 'POST' });
@@ -266,6 +296,7 @@ export default function LandingPage({ invitationToken }: { invitationToken?: str
     rtmClient?.logout().catch((err) => console.error('RTM logout error:', err));
     setRtmClient(null);
     setShowConversation(false);
+    endInFlightRef.current = false;
   };
 
   return (
@@ -294,7 +325,7 @@ export default function LandingPage({ invitationToken }: { invitationToken?: str
               </div>
             ) : (
               <QuickstartPreCallCard
-                isLoading={isLoading}
+                isLoading={isLoading || isInvitationLoading}
                 error={error}
                 onStartConversation={handleStartConversation}
                 interview={invitation}

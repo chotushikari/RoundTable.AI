@@ -1,13 +1,14 @@
 import { randomUUID } from 'crypto';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { createAgoraChannel, createAgoraRtcUid, createAgoraToken, startInterviewAgent, stopInterviewAgent } from '@/lib/agora-server';
+import { createAgoraChannel, createAgoraRtcUid, createAgoraToken } from '@/lib/agora-server';
 import { apiError } from '@/lib/http';
 import { interviewStore } from '@/lib/interview-store';
 import { candidateCookieName, createCandidateGrant, createOpaqueToken, hashToken } from '@/lib/security';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import type { CompetencyState, InterviewSessionRecord } from '@/types/interview';
 import { DEFAULT_AGENT_UID } from '@/lib/agora';
+import { DEMO_OPENING_QUESTION, demoRoles } from '@/lib/interview-demo';
 
 const StartSchema = z.object({
   consent: z.literal(true),
@@ -71,14 +72,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
       agentUid: String(DEFAULT_AGENT_UID),
       agoraAgentId: null,
       llmTokenHash: hashToken(llmToken),
-      activeRole: version.definition.panelRoles[0],
+      activeRole: version.definition.demoMode ? demoRoles(version.definition.panelRoles)[0] : version.definition.panelRoles[0],
       previousRole: null,
       consecutiveRoleTurns: 0,
       currentModality: 'voice',
+      phase: version.definition.demoMode ? 'background' : 'introduction',
       competencyState,
       askedMustAsk: [],
       coveredTopics: [],
-      pendingQuestion: null,
+      pendingQuestion: version.definition.demoMode ? DEMO_OPENING_QUESTION : null,
       stateVersion: 0,
       toolRunCount: 0,
       startedAt,
@@ -87,52 +89,35 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     };
 
     const tokenData = createAgoraToken(channelName, rtcUid);
-    const session = await interviewStore.createSession(invitation, sessionInput);
-    let agentId: string | null = null;
-    try {
-      agentId = await startInterviewAgent({ sessionId: id, channel: channelName, rtcUid, llmToken });
-      await interviewStore.updateSession(id, {
-        agoraAgentId: agentId,
-        status: 'in_progress',
-        stateVersion: 1,
-      }, 0);
-      await interviewStore.appendEvent(id, 'session.started', { consent: true, resumeProvided: Boolean(body.resumeText), candidateNameProvided: Boolean(body.candidateName) }).catch((eventError) => {
-        console.error('[session] failed to append start event', eventError);
-      });
-      const response = NextResponse.json({
-        sessionId: id,
-        channel: channelName,
-        rtcToken: tokenData.token,
-        rtmToken: tokenData.token,
-        token: tokenData.token,
-        rtcUid,
-        uid: rtcUid,
-        agentUid: String(DEFAULT_AGENT_UID),
-        agentId,
-        expiresAt: tokenData.expiresAt,
-      }, { status: 201 });
-      const feedbackAccessExpiresAt = new Date(Date.now() + 30 * 86_400_000).toISOString();
-      response.cookies.set(candidateCookieName(), createCandidateGrant(id, feedbackAccessExpiresAt), {
-        httpOnly: true,
-        sameSite: 'strict',
-        secure: process.env.NODE_ENV === 'production',
-        expires: new Date(feedbackAccessExpiresAt),
-        path: '/',
-      });
-      return response;
-    } catch (error) {
-      if (agentId) await stopInterviewAgent(agentId).catch(() => {});
-      const fresh = await interviewStore.getSession(session.id);
-      if (fresh && fresh.status !== 'failed') {
-        await interviewStore.updateSession(session.id, {
-          status: 'failed',
-          connectionHealth: 'disconnected',
-          stateVersion: fresh.stateVersion + 1,
-        }, fresh.stateVersion).catch(() => {});
-      }
-      await interviewStore.appendEvent(id, 'session.start_failed', { message: error instanceof Error ? error.message : 'unknown' }).catch(() => {});
-      throw error;
-    }
+    await interviewStore.createSession(invitation, sessionInput);
+    await interviewStore.appendEvent(id, 'session.created', {
+      consent: true,
+      resumeProvided: Boolean(body.resumeText),
+      candidateNameProvided: Boolean(body.candidateName),
+    }).catch((eventError) => console.error('[session] failed to append creation event', eventError));
+    const interviewEndsAt = new Date(Date.parse(startedAt) + version.definition.durationMinutes * 60_000).toISOString();
+    const response = NextResponse.json({
+      sessionId: id,
+      channel: channelName,
+      rtcToken: tokenData.token,
+      rtmToken: tokenData.token,
+      token: tokenData.token,
+      rtcUid,
+      uid: rtcUid,
+      agentUid: String(DEFAULT_AGENT_UID),
+      agentId: null,
+      expiresAt: tokenData.expiresAt,
+      interviewEndsAt,
+    }, { status: 201 });
+    const feedbackAccessExpiresAt = new Date(Date.now() + 30 * 86_400_000).toISOString();
+    response.cookies.set(candidateCookieName(), createCandidateGrant(id, feedbackAccessExpiresAt), {
+      httpOnly: true,
+      sameSite: 'strict',
+      secure: process.env.NODE_ENV === 'production',
+      expires: new Date(feedbackAccessExpiresAt),
+      path: '/',
+    });
+    return response;
   } catch (error) {
     return apiError(error, 'Failed to start interview session');
   }
