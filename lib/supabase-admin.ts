@@ -3,7 +3,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 let adminClient: SupabaseClient | null | undefined;
 
 export function isDemoMode(): boolean {
-  return process.env.NODE_ENV !== 'production' && process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
+  return process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
 }
 
 export function hasSupabaseConfig(): boolean {
