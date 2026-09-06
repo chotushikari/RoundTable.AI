@@ -53,6 +53,8 @@ Apply every migration in [supabase/migrations](supabase/migrations) in filename 
 - `GROQ_API_KEY`, with optional `GROQ_EVALUATOR_MODEL`, `GROQ_SPEAKER_MODEL`, `GROQ_PLANNER_MODEL`, and `GROQ_ASSESSMENT_MODEL`
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`
 - `NEXT_PUBLIC_DEMO_MODE=true` (optional local testing mode; disables company email authentication and must not be enabled in production)
+- `NEXT_PUBLIC_DISABLE_COMPANY_AUTH=true` (submission/demo-only public company dashboard; keeps Supabase persistence enabled and must be removed after judging)
+- `PUBLIC_DEMO_ORGANIZATION_ID` (optional fixed organization UUID for that public dashboard)
 - `DEMO_COMPANY_NAME` (optional label when using the process-local demo store)
 - `SESSION_SIGNING_SECRET`
 - `E2B_API_KEY`
@@ -85,7 +87,7 @@ Secrets without the `NEXT_PUBLIC_` prefix must never reach the browser.
 - `POST /api/mcp/:grant`
 - `POST /api/webhooks/agora`
 
-Company endpoints require a Supabase access token. Candidate session endpoints require the HttpOnly signed guest cookie. The LLM endpoint uses a random per-session bearer credential known only to Agora and the server.
+Company endpoints normally require a Supabase access token. When the explicit submission-only `NEXT_PUBLIC_DISABLE_COMPANY_AUTH=true` escape hatch is enabled, they instead use a fixed public demo organization while retaining Supabase persistence. Candidate session endpoints require the HttpOnly signed guest cookie. The LLM endpoint uses a random per-session bearer credential known only to Agora and the server.
 
 After finalization, the company report endpoint returns a stable dashboard projection: session and candidate metadata, competency evidence, role views, coverage, an evidence-linked transcript, and factual workspace metadata. The candidate enters the report name before consenting and joining unless the invitation already supplies it. Each accepted spoken answer is associated with the panel member whose question preceded it; the first demo answer belongs to Hiring Manager. Control utterances such as “continue” and “check now” are excluded. Completed code and canvas tasks contribute conservative, specific competency signals backed by immutable `artifact_versions`; they do not claim exhaustive correctness. Transcript citations open the cited turn, while workspace citations open the Workspace section. The endpoint never exposes internal controller cache, live private events, raw media, raw source, or an automated hire/reject decision.
 

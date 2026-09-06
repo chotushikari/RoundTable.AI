@@ -20,12 +20,13 @@ function isReport(value: unknown): value is CompanyInterviewReport {
 }
 
 export function CompanyDashboard() {
+  const companyAuthDisabled = process.env.NEXT_PUBLIC_DISABLE_COMPANY_AUTH === 'true';
   const supabase = useMemo(() => {
-    if (process.env.NEXT_PUBLIC_DEMO_MODE === 'true') return null;
+    if (companyAuthDisabled || process.env.NEXT_PUBLIC_DEMO_MODE === 'true') return null;
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
     return url && key ? createClient(url, key) : null;
-  }, []);
+  }, [companyAuthDisabled]);
   const [session, setSession] = useState<Session | null>(null);
   const [email, setEmail] = useState('');
   const [organizationName, setOrganizationName] = useState('');

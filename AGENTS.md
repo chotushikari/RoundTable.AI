@@ -33,6 +33,7 @@ The sections below (Start Here, Patterns, Anti-Patterns, etc.) remain the canoni
 - Product APIs: company interviews, signed invitations, sessions, artifacts, assessment release, MCP, and Agora webhooks live in `app/api`
 - Voice pipeline: Agora-managed STT/TTS with an authenticated RoundTable custom LLM/controller endpoint
 - Persistence and auth: Supabase in production; process-local memory is development/test fallback only
+- Submission auth bypass: `NEXT_PUBLIC_DISABLE_COMPANY_AUTH=true` deliberately exposes one fixed company organization while retaining Supabase persistence; it is temporary and must never be used with real candidate data.
 - Workspaces: Monaco code and one Excalidraw canvas with private checkpoints; server-selected E2B execution
 - Presentation: a browser-rendered role-aware AI avatar follows the server-owned active panel role and agent state; it does not create a video stream or another agent.
 - Public presentation: the homepage is a continuously interpolated, looping Three.js/Anime.js narrative with Manrope and IBM Plex Mono typography, a shadcn voice work surface, a one-question Agora interview sample, and a separate bounded Agora companion greeting. Production must opt in with `ENABLE_HOMEPAGE_VOICE_DEMO=true`.

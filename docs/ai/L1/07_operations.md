@@ -4,6 +4,8 @@ Deploy as one Next.js app on Vercel and one Supabase project. Set all variables 
 
 On Vercel, `VERCEL_PROJECT_PRODUCTION_URL` (falling back to `VERCEL_URL`) takes precedence for Agora callbacks and invitation links. This prevents a local or expired tunnel copied through `APP_BASE_URL` from breaking production. Supabase Authentication must allow the deployed `/company` redirect URL.
 
+For a time-limited public submission, `NEXT_PUBLIC_DISABLE_COMPANY_AUTH=true` bypasses the company email gate without switching to process-local storage. The server creates or reuses `PUBLIC_DEMO_ORGANIZATION_ID` (or the fixed demo UUID). This deliberately exposes that organization's company dashboard and completed reports; unset the flag after judging.
+
 Set `ENABLE_HOMEPAGE_VOICE_DEMO=true` on Vercel only when the public one-question sample should be available. The sample uses Agora reseller STT/LLM/TTS through the original token/start/stop boundary and has no Supabase interview record. Keep it false when the homepage should remain visual-only.
 
 Vercel invokes `/api/cron/retention` daily with `CRON_SECRET`; the route runs the Supabase cleanup function. Groq evaluator, speaker, planner, and assessment models are independently configurable; structured requests use bounded completion budgets and rate-limit failures retain deterministic evidence-only output. Monitor session start failures, RTC connection state, agent errors, evaluator fallbacks, CAS conflicts, interruption events, role transitions, tool latency, E2B failures, and assessment completion. Never log bearer tokens, resumes, full prompts, or raw media.

@@ -2,8 +2,15 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 let adminClient: SupabaseClient | null | undefined;
 
+const PUBLIC_COMPANY_USER_ID = '00000000-0000-4000-8000-000000000001';
+const PUBLIC_COMPANY_ORGANIZATION_ID = '00000000-0000-4000-8000-000000000002';
+
 export function isDemoMode(): boolean {
   return process.env.NODE_ENV !== 'production' && process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
+}
+
+export function isCompanyAuthDisabled(): boolean {
+  return process.env.NEXT_PUBLIC_DISABLE_COMPANY_AUTH === 'true';
 }
 
 export function hasSupabaseConfig(): boolean {
@@ -42,6 +49,22 @@ export async function requireCompanyContext(request: Request): Promise<{
   userId: string;
   organizationId: string;
 }> {
+  if (isCompanyAuthDisabled()) {
+    const admin = getSupabaseAdmin();
+    const organizationId =
+      process.env.PUBLIC_DEMO_ORGANIZATION_ID ?? PUBLIC_COMPANY_ORGANIZATION_ID;
+
+    if (admin) {
+      const { error } = await admin.from('organizations').upsert(
+        { id: organizationId, name: 'RoundTable Demo Company' },
+        { onConflict: 'id', ignoreDuplicates: true },
+      );
+      if (error) throw new Error(`Public company workspace setup failed: ${error.message}`);
+    }
+
+    return { userId: PUBLIC_COMPANY_USER_ID, organizationId };
+  }
+
   const { userId, admin } = await requireSupabaseUser(request);
 
   if (!admin) {
@@ -49,7 +72,7 @@ export async function requireCompanyContext(request: Request): Promise<{
       userId,
       organizationId:
         request.headers.get('x-demo-organization-id') ??
-        '00000000-0000-4000-8000-000000000002',
+        PUBLIC_COMPANY_ORGANIZATION_ID,
     };
   }
 
@@ -83,7 +106,7 @@ export async function requireSupabaseUser(request: Request): Promise<{
     if (process.env.NODE_ENV === 'production') {
       throw new Error('Supabase is not configured');
     }
-    return { userId: '00000000-0000-4000-8000-000000000001', admin: null };
+    return { userId: PUBLIC_COMPANY_USER_ID, admin: null };
   }
 
   if (!token) throw new Error('Company authentication is required');

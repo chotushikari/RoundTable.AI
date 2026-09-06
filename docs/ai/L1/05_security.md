@@ -8,5 +8,7 @@ The optional camera interaction check requires a visible candidate consent actio
 
 Company reports require organization membership and are available only after completion. The report is an allow-listed projection rather than a database dump: it excludes controller cache, session events, credentials, raw media, and raw workspace content. All assessment claims remain transcript- or artifact-evidence-linked and retain `humanReviewRequired: true`.
 
+`NEXT_PUBLIC_DISABLE_COMPANY_AUTH=true` is an explicit submission-only escape hatch. It makes the company dashboard and company report APIs public under one fixed demo organization while still using Supabase persistence. Never enable it for real candidate data, and remove it immediately after judging.
+
 
 The homepage voice sample is intentionally bounded and disabled in production unless `ENABLE_HOMEPAGE_VOICE_DEMO=true`. Its agent prompt is server-owned, asks one question, produces one observation, makes no hiring decision, and uses a short idle timeout. It does not create an interview session or persist assessment evidence.
