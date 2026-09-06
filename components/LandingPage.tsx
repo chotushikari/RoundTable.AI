@@ -329,7 +329,7 @@ export default function LandingPage({
   };
 
   return (
-    <div className={compactDemo ? 'relative flex min-h-[26rem] flex-col bg-[#171717] text-[#ededed]' : companionDemo ? 'relative flex min-h-[4.5rem] flex-col bg-transparent text-[#ededed]' : 'relative flex h-dvh min-h-screen flex-col overflow-hidden bg-[#0d0d0d] text-[#ededed] before:pointer-events-none before:absolute before:inset-0 before:bg-[linear-gradient(rgba(255,255,255,.022)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.022)_1px,transparent_1px)] before:bg-[size:48px_48px]'}>
+    <div className={compactDemo ? 'relative flex min-h-[20rem] flex-col bg-[#171717] text-[#ededed]' : companionDemo ? 'relative flex min-h-[4.5rem] flex-col bg-transparent text-[#ededed]' : 'relative flex h-dvh min-h-screen flex-col overflow-hidden bg-[#0d0d0d] text-[#ededed] before:pointer-events-none before:absolute before:inset-0 before:bg-[linear-gradient(rgba(255,255,255,.022)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.022)_1px,transparent_1px)] before:bg-[size:48px_48px]'}>
       {!embeddedDemo && (isInvitationLoading || isLoading || isEnding) && <RoundTableLoadingScreen overlay label={isInvitationLoading ? 'Opening your interview' : isEnding ? 'Finalizing your interview' : 'Securing your voice room'} />}
       {/* Hero shell: either shows the pre-call CTA or swaps in the live conversation experience. */}
       <div
@@ -361,7 +361,7 @@ export default function LandingPage({
                     {isLoading ? 'Connecting the Agora companion...' : error ?? 'Tap the companion to hear its Agora voice.'}
                   </p>
                 ) : (
-                <div className="flex min-h-[26rem] w-full flex-col justify-between px-6 pb-6 pt-10 text-left">
+                <div className="flex min-h-[20rem] w-full flex-col justify-between px-5 pb-5 pt-6 text-left">
                   <div className="flex flex-1 flex-col items-center justify-center text-center">
                     <div className="grid h-9 w-9 place-items-center rounded-full border border-[#353535] bg-[#1d1d1d] text-[#3ecf8e]">
                       <Mic size={15} />

@@ -153,10 +153,10 @@
 .roleMap {
   position: absolute;
   z-index: 7;
-  top: 26%;
-  left: 79%;
-  width: min(34vw, 28rem);
-  height: min(23vw, 17rem);
+  top: 30%;
+  left: 73%;
+  width: min(29vw, 24rem);
+  height: min(20vw, 15rem);
   transform: translate(-50%, -50%);
   pointer-events: none;
 }
@@ -182,12 +182,12 @@
 .demoCard {
   position: absolute;
   z-index: 11;
-  right: auto;
-  bottom: clamp(1rem, 3vw, 2.5rem);
-  left: 50%;
-  width: min(74rem, calc(100vw - 8rem));
-  min-height: 29rem;
-  transform: translateX(-50%);
+  right: clamp(2rem, 7vw, 7rem);
+  bottom: clamp(1.5rem, 5vw, 4rem);
+  left: auto;
+  width: min(36rem, 40vw);
+  min-height: 20rem;
+  transform: none;
   overflow: hidden;
   border-color: #303030;
   border-radius: 14px;

@@ -338,7 +338,7 @@ export function RoundTableExperience() {
           <section ref={heroSceneRef} className={styles.scene} data-active={heroVisible} aria-hidden={!heroVisible}>
             <div className={styles.heroCopy}>
               <p data-reveal className={styles.eyebrow}>{phase === 'return' ? 'Ready when you are' : 'Adaptive voice interviews'}</p>
-              <h1 data-reveal>Hire the next generation of people.</h1>
+              <h1 data-reveal>Hire the next generation of engineers.</h1>
             </div>
             <div data-reveal className={styles.heroActions}>
               <Button className={styles.primaryButton} onClick={scrollToPanel}>Try interview demo</Button>
