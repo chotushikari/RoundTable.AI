@@ -230,7 +230,7 @@ export function RoundTableExperience() {
   const progressRef = useRef(0);
   const sceneRef = useRef<SceneState | null>(null);
   const companionButtonRef = useRef<HTMLButtonElement>(null);
-  const [phase, setPhase] = useState<'hero' | 'panel' | 'agora' | 'return'>('hero');
+  const [phase, setPhase] = useState<'hero' | 'panel' | 'agora'>('hero');
   const [companionHappy, setCompanionHappy] = useState(false);
   const [companionStartSignal, setCompanionStartSignal] = useState(0);
 
@@ -264,24 +264,16 @@ export function RoundTableExperience() {
     const animateScroll = () => {
       current += (progressRef.current - current) * (reducedMotion ? 1 : 0.095);
       const heroOut = 1 - smoothstep(0.1, 0.23, current);
-      const heroReturn = smoothstep(0.9, 0.985, current);
-      const heroOpacity = Math.min(1, heroOut + heroReturn);
+      const heroOpacity = heroOut;
       const panelOpacity = smoothstep(0.17, 0.29, current) * (1 - smoothstep(0.53, 0.65, current));
-      const agoraOpacity = smoothstep(0.59, 0.7, current) * (1 - smoothstep(0.88, 0.975, current));
+      const agoraOpacity = smoothstep(0.59, 0.7, current);
       showScene(heroSceneRef.current, heroOpacity, (1 - heroOpacity) * -10);
       showScene(panelSceneRef.current, panelOpacity, (1 - panelOpacity) * 14);
       showScene(agoraSceneRef.current, agoraOpacity, (1 - agoraOpacity) * 14);
-      const nextPhase = current < 0.2 ? 'hero' : current < 0.6 ? 'panel' : current < 0.91 ? 'agora' : 'return';
+      const nextPhase = current < 0.2 ? 'hero' : current < 0.6 ? 'panel' : 'agora';
       if (nextPhase !== currentPhase) {
         currentPhase = nextPhase;
         setPhase(nextPhase);
-      }
-      if (current > 0.992 && progressRef.current > 0.997 && trackRef.current) {
-        window.scrollTo({ top: trackRef.current.offsetTop + 1, behavior: 'auto' });
-        current = 0;
-        progressRef.current = 0;
-        currentPhase = 'hero';
-        setPhase('hero');
       }
       animationRaf = requestAnimationFrame(animateScroll);
     };
@@ -326,7 +318,7 @@ export function RoundTableExperience() {
     sceneRef.current?.setPointer(x, y);
   }, []);
 
-  const heroVisible = phase === 'hero' || phase === 'return';
+  const heroVisible = phase === 'hero';
 
   return (
     <main className={styles.page} onPointerMove={handlePointerMove}>
@@ -337,7 +329,7 @@ export function RoundTableExperience() {
 
           <section ref={heroSceneRef} className={styles.scene} data-active={heroVisible} aria-hidden={!heroVisible}>
             <div className={styles.heroCopy}>
-              <p data-reveal className={styles.eyebrow}>{phase === 'return' ? 'Ready when you are' : 'Adaptive voice interviews'}</p>
+              <p data-reveal className={styles.eyebrow}>Adaptive voice interviews</p>
               <h1 data-reveal>Hire the next generation of engineers.</h1>
             </div>
             <div data-reveal className={styles.heroActions}>
@@ -388,7 +380,7 @@ export function RoundTableExperience() {
 
           <nav className={styles.progress} aria-label="Page progress">
             {(['hero', 'panel', 'agora'] as const).map((item) => (
-              <span key={item} data-current={phase === item || (item === 'hero' && phase === 'return')} />
+              <span key={item} data-current={phase === item} />
             ))}
           </nav>
         </div>

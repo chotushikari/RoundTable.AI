@@ -182,9 +182,9 @@
 .demoCard {
   position: absolute;
   z-index: 11;
-  right: clamp(2rem, 7vw, 7rem);
+  right: auto;
   bottom: clamp(1.5rem, 5vw, 4rem);
-  left: auto;
+  left: clamp(2rem, 7vw, 7rem);
   width: min(36rem, 40vw);
   min-height: 20rem;
   transform: none;
