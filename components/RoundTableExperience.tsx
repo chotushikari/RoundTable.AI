@@ -23,6 +23,8 @@ const roles = [
   { label: 'Behavioural', className: styles.roleWest },
 ];
 
+const ARTIFACT_LAYOUT_VERSION = 'right-constellation-v4';
+
 type SceneState = {
   setPointer: (x: number, y: number) => void;
   setHappy: (happy: boolean) => void;
@@ -103,16 +105,23 @@ function createArtifact(canvas: HTMLCanvasElement, progressRef: MutableRefObject
   );
   face.add(faceShell, faceOutline);
 
-  const eyeWhiteMaterial = new THREE.MeshBasicMaterial({ color: 0xededed });
-  const pupilMaterial = new THREE.MeshBasicMaterial({ color: 0x101010 });
-  const leftEye = new THREE.Mesh(new THREE.SphereGeometry(0.21, 24, 24), eyeWhiteMaterial);
+  const eyeWhiteMaterial = new THREE.MeshBasicMaterial({ color: 0xdfe8e3 });
+  const pupilMaterial = new THREE.MeshBasicMaterial({ color: 0x27362f });
+  const leftEye = new THREE.Mesh(new THREE.SphereGeometry(0.16, 24, 24), eyeWhiteMaterial);
   const rightEye = leftEye.clone();
-  leftEye.position.set(-0.42, 0.27, 1.02);
-  rightEye.position.set(0.42, 0.27, 1.02);
-  const leftPupil = new THREE.Mesh(new THREE.SphereGeometry(0.075, 18, 18), pupilMaterial);
+  leftEye.scale.set(0.88, 1.08, 0.82);
+  rightEye.scale.copy(leftEye.scale);
+  leftEye.position.set(-0.36, 0.24, 1.04);
+  rightEye.position.set(0.36, 0.24, 1.04);
+  const leftPupil = new THREE.Mesh(new THREE.SphereGeometry(0.052, 18, 18), pupilMaterial);
   const rightPupil = leftPupil.clone();
-  leftPupil.position.set(-0.42, 0.27, 1.21);
-  rightPupil.position.set(0.42, 0.27, 1.21);
+  leftPupil.position.set(-0.36, 0.24, 1.19);
+  rightPupil.position.set(0.36, 0.24, 1.19);
+  const eyeHighlightMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const leftHighlight = new THREE.Mesh(new THREE.SphereGeometry(0.016, 12, 12), eyeHighlightMaterial);
+  const rightHighlight = leftHighlight.clone();
+  leftHighlight.position.set(-0.377, 0.265, 1.235);
+  rightHighlight.position.set(0.343, 0.265, 1.235);
   const nose = new THREE.Mesh(
     new THREE.ConeGeometry(0.085, 0.25, 16),
     new THREE.MeshBasicMaterial({ color: 0x24b47e }),
@@ -126,7 +135,7 @@ function createArtifact(canvas: HTMLCanvasElement, progressRef: MutableRefObject
   );
   const mouthGeometry = new THREE.TubeGeometry(mouthCurve, 24, 0.025, 8, false);
   const mouth = new THREE.Mesh(mouthGeometry, new THREE.MeshBasicMaterial({ color: 0xd4d4d4 }));
-  face.add(leftEye, rightEye, leftPupil, rightPupil, nose, mouth);
+  face.add(leftEye, rightEye, leftPupil, rightPupil, leftHighlight, rightHighlight, nose, mouth);
 
   let pointerX = 0;
   let pointerY = 0;
@@ -156,8 +165,8 @@ function createArtifact(canvas: HTMLCanvasElement, progressRef: MutableRefObject
     coreGlow.visible = core.visible;
     ringA.visible = core.visible;
     ringB.visible = core.visible;
-    const panelOffsetX = window.innerWidth > 900 ? panel * 2.55 : 0;
-    const panelOffsetY = window.innerWidth > 900 ? panel * 1.28 : 0;
+    const panelOffsetX = window.innerWidth > 900 ? panel * 2.6 : 0;
+    const panelOffsetY = 0;
     root.position.x += (panelOffsetX - root.position.x) * 0.08;
     root.position.y += (panelOffsetY - root.position.y) * 0.08;
     ringA.scale.setScalar(1 + panel * 0.34);
@@ -185,10 +194,12 @@ function createArtifact(canvas: HTMLCanvasElement, progressRef: MutableRefObject
     face.rotation.x += ((-pointerY * 0.05) - face.rotation.x) * 0.08;
     const pupilDx = pointerX * 0.075;
     const pupilDy = pointerY * 0.055;
-    leftPupil.position.set(-0.42 + pupilDx, 0.27 + pupilDy, 1.21);
-    rightPupil.position.set(0.42 + pupilDx, 0.27 + pupilDy, 1.21);
-    mouth.scale.y += (((happy ? -1 : 1)) - mouth.scale.y) * 0.12;
-    mouth.position.y += (((happy ? -0.9 : 0)) - mouth.position.y) * 0.12;
+    leftPupil.position.set(-0.36 + pupilDx, 0.24 + pupilDy, 1.19);
+    rightPupil.position.set(0.36 + pupilDx, 0.24 + pupilDy, 1.19);
+    leftHighlight.position.set(-0.377 + pupilDx, 0.265 + pupilDy, 1.235);
+    rightHighlight.position.set(0.343 + pupilDx, 0.265 + pupilDy, 1.235);
+    mouth.scale.y += (((happy ? 1.3 : 1)) - mouth.scale.y) * 0.12;
+    mouth.position.y += (((happy ? 0.025 : 0)) - mouth.position.y) * 0.12;
     face.position.y = happy ? Math.sin(time * 0.006) * 0.05 : 0;
 
     root.scale.setScalar(1 - panel * 0.48);
@@ -238,7 +249,7 @@ export function RoundTableExperience() {
     if (!canvasRef.current) return;
     sceneRef.current = createArtifact(canvasRef.current, progressRef);
     return () => sceneRef.current?.destroy();
-  }, []);
+  }, [ARTIFACT_LAYOUT_VERSION]);
 
   useEffect(() => {
     let scrollRaf = 0;

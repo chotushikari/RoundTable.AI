@@ -153,7 +153,7 @@
 .roleMap {
   position: absolute;
   z-index: 7;
-  top: 30%;
+  top: 42%;
   left: 73%;
   width: min(29vw, 24rem);
   height: min(20vw, 15rem);
