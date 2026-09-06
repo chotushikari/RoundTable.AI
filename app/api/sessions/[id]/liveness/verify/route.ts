@@ -5,6 +5,8 @@ import { apiError } from '@/lib/http';
 import { interviewStore } from '@/lib/interview-store';
 import { analyzeLivenessClip, type LivenessChallenge } from '@/lib/liveness';
 
+export const maxDuration = 60;
+
 const BodySchema = z.object({
   challengeId: z.string().uuid(),
   mimeType: z.enum(['video/webm', 'video/mp4']),

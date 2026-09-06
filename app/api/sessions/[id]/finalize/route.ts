@@ -5,6 +5,8 @@ import { finalizeSessionAssessment } from '@/lib/assessment';
 import { apiError } from '@/lib/http';
 import { interviewStore } from '@/lib/interview-store';
 
+export const maxDuration = 60;
+
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;

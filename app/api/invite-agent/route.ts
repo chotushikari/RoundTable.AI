@@ -12,6 +12,8 @@ import { ClientStartRequest, AgentResponse } from '@/types/conversation';
 import { DEFAULT_AGENT_UID } from '@/lib/agora';
 import { legacyDemoEnabled } from '@/lib/legacy-demo';
 
+export const maxDuration = 60;
+
 // System prompt that defines the agent's personality and behavior.
 // Swap this out to change what the agent talks about.
 const ADA_PROMPT = `You are **RoundTable**, a concise AI interviewer in a one-question public voice demo powered by Agora Conversational AI.

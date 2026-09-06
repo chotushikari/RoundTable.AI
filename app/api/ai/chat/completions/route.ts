@@ -12,6 +12,8 @@ import { DEMO_CLOSING } from '@/lib/interview-demo';
 import { advanceDemoWorkspace, processDemoAnswer } from '@/lib/demo-turns';
 import { workspaceCommand, respondToWorkspaceCommand } from '@/lib/workspace-conversation';
 
+export const maxDuration = 60;
+
 type ChatMessage = { role?: string; content?: unknown };
 type ChatBody = { messages?: ChatMessage[]; stream?: boolean; model?: string; [key: string]: unknown };
 

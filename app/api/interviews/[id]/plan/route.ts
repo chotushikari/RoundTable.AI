@@ -5,6 +5,8 @@ import { interviewStore } from '@/lib/interview-store';
 import { requireCompanyContext } from '@/lib/supabase-admin';
 import { InterviewPlanSchema } from '@/types/interview';
 
+export const maxDuration = 60;
+
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const company = await requireCompanyContext(request);
