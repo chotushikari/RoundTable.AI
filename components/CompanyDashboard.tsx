@@ -126,27 +126,133 @@ export function CompanyDashboard() {
   };
 
   if (supabase && !session) {
-    return <main className="mx-auto max-w-md p-8"><h1 className="text-2xl font-semibold">Company sign in</h1><p className="mt-2 text-sm text-muted-foreground">Receive a Supabase magic link.</p><input value={email} onChange={(event) => setEmail(event.target.value)} className="mt-6 w-full rounded border p-2 text-black" placeholder="you@company.com"/><button onClick={magicLink} className="mt-3 rounded bg-primary px-4 py-2 text-primary-foreground">Send magic link</button><p className="mt-3 text-sm">{message}</p></main>;
+    return (
+      <main className="flex min-h-screen items-center justify-center p-4">
+        <div className="flex w-full max-w-md animate-fade-up flex-col gap-6 rounded-2xl border border-border/40 bg-card p-8 shadow-2xl glass">
+          <div className="flex flex-col gap-2 text-center">
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">Company Sign In</h1>
+            <p className="text-sm font-medium text-muted-foreground">Authenticate to access the RoundTable command center.</p>
+          </div>
+          <div className="flex flex-col gap-4">
+            <input value={email} onChange={(event) => setEmail(event.target.value)} className="rounded-xl border border-border/50 bg-surface p-3 text-sm text-foreground transition-colors focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary" placeholder="you@company.com" />
+            <button onClick={magicLink} className="rounded-xl bg-primary py-3 text-sm font-bold text-primary-foreground transition-all hover:bg-primary/90 hover:shadow-[0_0_20px_hsl(var(--primary)/0.3)]">Send Magic Link</button>
+          </div>
+          {message && <p className="text-center text-xs font-medium text-primary">{message}</p>}
+        </div>
+      </main>
+    );
   }
 
   return (
-    <main className="mx-auto max-w-5xl space-y-8 p-6">
-      <header><h1 className="text-3xl font-semibold">RoundTable company dashboard</h1><p className="mt-2 text-sm text-muted-foreground">Create adaptive interviews. Live sessions expose status and health only.</p></header>
-      {message.includes('membership') && <section className="rounded border p-4"><h2 className="font-semibold">Create your organization</h2><input value={organizationName} onChange={(event) => setOrganizationName(event.target.value)} className="mt-3 rounded border p-2 text-black" placeholder="Organization name"/><button onClick={createOrganization} className="ml-2 rounded bg-primary px-3 py-2 text-primary-foreground">Create</button></section>}
-      <section className="grid gap-3 rounded border p-5">
-        <div>
-          <h2 className="text-xl font-semibold">New interview</h2>
-          <p className="mt-1 text-xs text-muted-foreground">Panel demo: one project, five roles. Aim for about 3 minutes with brief answers; up to 5 minutes for pauses.</p>
-          <p className="mt-1 text-xs text-muted-foreground">Hiring Manager → Technical → Product Manager → Customer → Behavioural. Ends after all five answers.</p>
+    <main className="mx-auto flex max-w-7xl flex-col gap-8 p-6 lg:p-12">
+      <header className="flex flex-col gap-2">
+        <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">Command Center</h1>
+        <p className="text-sm font-medium text-muted-foreground">Orchestrate adaptive AI panels and monitor live candidate telemetry.</p>
+      </header>
+
+      {message.includes('membership') && (
+        <section className="animate-fade-up rounded-2xl border border-border/40 bg-surface/50 p-6 glass">
+          <h2 className="text-lg font-semibold text-foreground">Create your organization</h2>
+          <div className="mt-4 flex gap-3">
+            <input value={organizationName} onChange={(event) => setOrganizationName(event.target.value)} className="flex-1 rounded-xl border border-border/50 bg-background p-3 text-sm text-foreground" placeholder="Organization name"/>
+            <button onClick={createOrganization} className="rounded-xl bg-primary px-6 py-3 text-sm font-bold text-primary-foreground transition-all hover:bg-primary/90">Create</button>
+          </div>
+        </section>
+      )}
+
+      <div className="grid gap-8 lg:grid-cols-12">
+        {/* Left Column: Create Interview */}
+        <section className="flex flex-col gap-6 rounded-3xl border border-border/40 bg-card p-6 shadow-xl lg:col-span-5 glass">
+          <div className="flex flex-col gap-1">
+            <h2 className="text-xl font-bold tracking-tight text-foreground">New Mission</h2>
+            <p className="text-xs font-medium text-muted-foreground leading-relaxed">
+              Define the role, context, and outcomes. The orchestrator will dynamically synthesize an adaptive interview plan.
+            </p>
+          </div>
+          
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2">
+              <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Role Title</label>
+              <input value={roleTitle} onChange={(event) => setRoleTitle(event.target.value)} className="rounded-xl border border-border/50 bg-surface/50 p-3 text-sm text-foreground focus:border-primary focus:outline-none" />
+            </div>
+            
+            <div className="flex flex-col gap-2">
+              <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Context / Job Description</label>
+              <textarea value={jdText} onChange={(event) => setJdText(event.target.value)} rows={4} className="rounded-xl border border-border/50 bg-surface/50 p-3 text-sm text-foreground focus:border-primary focus:outline-none" />
+            </div>
+            
+            <div className="flex flex-col gap-2">
+              <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Desired Outcomes (one per line)</label>
+              <textarea value={outcomes} onChange={(event) => setOutcomes(event.target.value)} rows={3} className="rounded-xl border border-border/50 bg-surface/50 p-3 text-sm text-foreground focus:border-primary focus:outline-none" />
+            </div>
+            
+            <button onClick={createInterview} className="mt-2 w-full rounded-xl bg-primary py-3 text-sm font-bold text-primary-foreground transition-all hover:bg-primary/90 hover:shadow-[0_0_20px_hsl(var(--primary)/0.3)]">
+              Generate Plan
+            </button>
+          </div>
+        </section>
+
+        {/* Right Column: Active Interviews & Telemetry */}
+        <div className="flex flex-col gap-6 lg:col-span-7">
+          {message && !message.includes('membership') && (
+            <div className="rounded-xl border border-primary/20 bg-primary/10 p-4 text-sm font-medium text-primary shadow-sm backdrop-blur-md">
+              {message}
+            </div>
+          )}
+
+          <section className="flex flex-col gap-4">
+            <h2 className="text-xl font-bold tracking-tight text-foreground">Active Campaigns</h2>
+            <div className="flex flex-col gap-4">
+              {interviews.length === 0 ? (
+                <div className="rounded-2xl border border-border/40 bg-surface/30 p-8 text-center text-sm font-medium text-muted-foreground">
+                  No active campaigns. Create a new mission to begin.
+                </div>
+              ) : (
+                interviews.map((item) => (
+                  <article key={item.id} className="flex flex-col gap-4 rounded-2xl border border-border/40 bg-card p-5 shadow-lg transition-all hover:border-primary/30">
+                    <div className="flex items-start justify-between">
+                      <div className="flex flex-col gap-1">
+                        <h3 className="font-bold text-foreground">{item.title}</h3>
+                        <span className={`w-fit rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${item.status === 'ready' ? 'bg-green-500/10 text-green-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                          {item.status}
+                        </span>
+                      </div>
+                      <button disabled={item.status !== 'ready'} onClick={() => publish(item.id)} className="rounded-lg bg-surface/50 px-3 py-1.5 text-xs font-bold text-foreground ring-1 ring-border/50 transition-all hover:bg-primary/20 hover:text-primary hover:ring-primary/30 disabled:opacity-30">
+                        Publish Link
+                      </button>
+                    </div>
+
+                    <div className="flex flex-col gap-2 border-t border-border/30 pt-4">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Session Telemetry</span>
+                      {sessions.filter((entry) => entry.interviewId === item.id).length === 0 ? (
+                        <span className="text-xs text-muted-foreground italic">No candidates yet.</span>
+                      ) : (
+                        sessions.filter((entry) => entry.interviewId === item.id).map((entry) => (
+                          <div key={entry.id} className="group flex items-center justify-between rounded-xl bg-surface/50 px-4 py-3 ring-1 ring-border/50 transition-all hover:bg-surface hover:ring-primary/30">
+                            <div className="flex items-center gap-3">
+                              <span className="relative flex h-2.5 w-2.5">
+                                {entry.status === 'in_progress' && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75"></span>}
+                                <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${entry.status === 'completed' ? 'bg-green-500' : entry.status === 'in_progress' ? 'bg-primary' : 'bg-muted-foreground'}`}></span>
+                              </span>
+                              <div className="flex flex-col">
+                                <span className="text-xs font-bold uppercase tracking-wider text-foreground">{entry.status.replace('_', ' ')}</span>
+                                <span className="text-[10px] font-medium text-muted-foreground">Health: {entry.health}</span>
+                              </div>
+                            </div>
+                            <a href={`/company/sessions/${entry.id}`} className="rounded-md px-2 py-1 text-xs font-bold text-primary hover:bg-primary/10">
+                              {entry.status === 'completed' ? 'View Report' : 'Live Panel'}
+                            </a>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </article>
+                ))
+              )}
+            </div>
+          </section>
         </div>
-        <input value={roleTitle} onChange={(event) => setRoleTitle(event.target.value)} className="rounded border p-2 text-black"/>
-        <textarea value={jdText} onChange={(event) => setJdText(event.target.value)} rows={5} className="rounded border p-2 text-black"/>
-        <textarea value={outcomes} onChange={(event) => setOutcomes(event.target.value)} rows={3} className="rounded border p-2 text-black"/>
-        <button onClick={createInterview} className="w-fit rounded bg-primary px-4 py-2 text-primary-foreground">Create and generate plan</button>
-      </section>
-      <p className="break-all rounded bg-muted p-3 text-sm">{message}</p>
-      <section><h2 className="text-xl font-semibold">Interviews</h2><div className="mt-3 grid gap-3">{interviews.map((item) => <article key={item.id} className="rounded border p-4"><div className="flex items-center justify-between"><div><div className="font-medium">{item.title}</div><div className="text-xs text-muted-foreground">{item.status}</div></div><button disabled={item.status !== 'ready'} onClick={() => publish(item.id)} className="rounded border px-3 py-2 text-sm disabled:opacity-40">Publish invitation</button></div><div className="mt-3 space-y-2">{sessions.filter((entry) => entry.interviewId === item.id).map((entry) => <div key={entry.id} className="flex items-center justify-between rounded bg-muted px-3 py-2 text-xs"><span>{entry.status} · {entry.health}</span>{entry.status === 'completed' && <button onClick={() => viewResult(entry.id)} className="underline">View evidence report</button>}</div>)}</div></article>)}</div></section>
-      {selectedResult && <section className="rounded border p-4"><div className="flex items-center justify-between"><h2 className="font-semibold">Completed interview evidence</h2><button onClick={releaseFeedback} className="rounded border px-3 py-2 text-xs">Release candidate summary</button></div><pre className="mt-3 max-h-[32rem] overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(selectedResult, null, 2)}</pre></section>}
+      </div>
     </main>
   );
 }

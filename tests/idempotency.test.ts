@@ -4,6 +4,7 @@ import { processCandidateTurn, processConversationControlTurn } from '@/lib/inte
 import { buildFallbackPlan } from '@/lib/interview-planner';
 import { interviewStore, resetMemoryStoreForTests } from '@/lib/interview-store';
 import type { InterviewSessionRecord } from '@/types/interview';
+import { DEFAULT_CHALLENGE_VECTOR } from '@/types/interview';
 import { answeredDemoRoles, DEMO_CLOSING, DEMO_OPENING_QUESTION, DEMO_ROLES } from '@/lib/interview-demo';
 import { demoQuestion, processDemoAnswer, mergeAnswerFragments, isIncompleteDemoAnswer } from '@/lib/demo-turns';
 import { POST as recordSessionEvent } from '@/app/api/sessions/[id]/events/route';
@@ -64,6 +65,8 @@ test('duplicate Agora LLM requests reuse one reserved turn and cached response',
     pendingQuestion: null,
     stateVersion: 0,
     toolRunCount: 0,
+    accumulatedContradictions: [],
+    challengeVector: DEFAULT_CHALLENGE_VECTOR,
     startedAt: new Date().toISOString(),
     completedAt: null,
     expiresAt: new Date(Date.now() + 60_000).toISOString(),
@@ -110,7 +113,7 @@ test('duplicate pause requests do not advance state or duplicate transcript turn
     channelName: 'control-channel', rtcUid: '2002', agentUid: '123456', agoraAgentId: 'agent-control',
     llmTokenHash: 'e'.repeat(64), activeRole: 'technical', previousRole: null, consecutiveRoleTurns: 0,
     currentModality: 'voice', phase: 'introduction', competencyState: {}, askedMustAsk: [], coveredTopics: [],
-    pendingQuestion: null, stateVersion: 0, toolRunCount: 0, startedAt: new Date().toISOString(),
+    pendingQuestion: null, stateVersion: 0, toolRunCount: 0, accumulatedContradictions: [], challengeVector: DEFAULT_CHALLENGE_VECTOR, startedAt: new Date().toISOString(),
     completedAt: null, expiresAt: new Date(Date.now() + 60_000).toISOString(),
   };
   await interviewStore.createSession(invitation, controlSession);
@@ -146,7 +149,7 @@ test('showcase ends only after five answers, with pauses and retries preserving 
     channelName: 'demo-channel', rtcUid: '2003', agentUid: '123456', agoraAgentId: 'agent-demo',
     llmTokenHash: 'a'.repeat(64), activeRole: 'hiring_manager', previousRole: null, consecutiveRoleTurns: 0,
     currentModality: 'voice', phase: 'background', competencyState: {}, askedMustAsk: [], coveredTopics: [],
-    pendingQuestion: DEMO_OPENING_QUESTION, stateVersion: 0, toolRunCount: 0,
+    pendingQuestion: DEMO_OPENING_QUESTION, stateVersion: 0, toolRunCount: 0, accumulatedContradictions: [], challengeVector: DEFAULT_CHALLENGE_VECTOR,
     // More than two minutes have elapsed; this must not stop the role sequence.
     startedAt: new Date(Date.now() - 150_000).toISOString(), completedAt: null,
     expiresAt: new Date(Date.now() + 600_000).toISOString(),

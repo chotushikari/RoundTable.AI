@@ -24,6 +24,7 @@ import {
 } from 'agora-agent-client-toolkit';
 import { AgentVisualizer } from 'agora-agent-uikit';
 import { MicButtonWithVisualizer } from 'agora-agent-uikit/rtc';
+import { ScenarioFrame } from './ScenarioFrame';
 import { DEFAULT_AGENT_UID } from '@/lib/agora';
 import {
   getCurrentInProgressMessage,
@@ -639,7 +640,19 @@ export default function ConversationComponent({
           role="region"
           aria-label="AI agent status visualization"
         >
-          <AgentVisualizer state={visualizerState} size="lg" />
+          {activeModality === 'scenario' ? (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <ScenarioFrame 
+                objective={`Interact with the candidate as the ${activeRole.replace('_', ' ')} in this scenario.`} 
+                role={activeRole} 
+              />
+              <div className="absolute opacity-20 transform scale-50 z-0">
+                <AgentVisualizer state={visualizerState} size="lg" />
+              </div>
+            </div>
+          ) : (
+            <AgentVisualizer state={visualizerState} size="lg" />
+          )}
           {remoteUsers.map((user) => (
             <div key={user.uid} className="hidden">
               <RemoteUser user={user} />

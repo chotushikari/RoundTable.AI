@@ -1,5 +1,9 @@
 import type { Metadata, Viewport } from 'next';
+import { Inter, Outfit } from 'next/font/google';
 import './globals.css';
+
+const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
+const outfit = Outfit({ subsets: ['latin'], variable: '--font-outfit' });
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -8,9 +12,9 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: 'Talk to your voice agent | Agora',
+  title: 'RoundTable AI | Autonomous AI Interview Panel',
   description:
-    "Next.js quickstart: real-time voice agent with live transcript, streaming audio, and low latency from Agora's Conversational AI Engine—API routes in one repo.",
+    "RoundTable AI orchestrates adaptive interview panels using Agora's Conversational AI engine to deeply evaluate engineering and product talent.",
   icons: {
     icon: [
       { url: '/favicon.ico' },
@@ -39,8 +43,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full">
-      <body className="h-full min-h-screen">{children}</body>
+    <html lang="en" className="dark">
+      <body className={`${inter.variable} ${outfit.variable} font-sans antialiased bg-background text-foreground selection:bg-primary/30`}>
+        {children}
+      </body>
     </html>
   );
 }

@@ -142,19 +142,29 @@ export function InterviewWorkspace({ sessionId, activeModality }: { sessionId: s
   };
 
   return (
-    <div className="flex h-full min-h-[28rem] w-full flex-col overflow-hidden rounded-lg border border-border/80 bg-background">
-      <div className="flex items-center justify-between border-b border-border px-3 py-2">
-        <div className="flex gap-2">
-          <button onClick={() => setTab('code')} className={`rounded px-3 py-1 text-xs ${tab === 'code' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>Code</button>
-          <button onClick={() => setTab('canvas')} className={`rounded px-3 py-1 text-xs ${tab === 'canvas' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>System design</button>
+    <div className="flex h-full min-h-[28rem] w-full flex-col overflow-hidden bg-transparent">
+      {/* Workspace Header */}
+      <div className="flex shrink-0 items-center justify-between border-b border-border/40 bg-surface/50 px-5 py-3 backdrop-blur-md">
+        <div className="flex gap-2 p-1 rounded-lg bg-background/50 ring-1 ring-border/50">
+          <button onClick={() => setTab('code')} className={`rounded-md px-4 py-1.5 text-xs font-bold transition-all ${tab === 'code' ? 'bg-primary text-primary-foreground shadow-[0_0_15px_hsl(var(--primary)/0.3)]' : 'text-muted-foreground hover:bg-surface/50 hover:text-foreground'}`}>Code Editor</button>
+          <button onClick={() => setTab('canvas')} className={`rounded-md px-4 py-1.5 text-xs font-bold transition-all ${tab === 'canvas' ? 'bg-primary text-primary-foreground shadow-[0_0_15px_hsl(var(--primary)/0.3)]' : 'text-muted-foreground hover:bg-surface/50 hover:text-foreground'}`}>System Design</button>
         </div>
-        <div className="flex gap-2">
-          {tab === 'code' && <button onClick={runTests} className="rounded border border-border px-3 py-1 text-xs">Run tests</button>}
-          <button onClick={() => void save(tab, true)} className="rounded bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground">Checkpoint for AI</button>
+        <div className="flex gap-3 items-center">
+          {tab === 'code' && <button onClick={runTests} className="rounded-md border border-border/50 bg-surface/50 px-4 py-1.5 text-xs font-bold text-foreground transition-all hover:bg-surface hover:ring-1 hover:ring-border">Run Tests</button>}
+          <button onClick={() => void save(tab, true)} className="rounded-md bg-accent px-4 py-1.5 text-xs font-bold text-accent-foreground shadow-[0_0_15px_hsl(var(--accent)/0.2)] transition-all hover:bg-accent/90">Share Checkpoint</button>
         </div>
       </div>
-      {constraints.length > 0 && <div className="border-b border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs">New constraint: {constraints.at(-1)}</div>}
-      <div className="min-h-0 flex-1">
+
+      {/* Constraint Banner */}
+      {constraints.length > 0 && (
+        <div className="flex shrink-0 animate-fade-up items-center gap-2 border-b border-amber-500/30 bg-amber-500/10 px-5 py-2.5 text-xs font-semibold text-amber-500 backdrop-blur-md">
+          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-amber-500/20 text-[10px]">!</span>
+          New constraint injected: {constraints.at(-1)}
+        </div>
+      )}
+
+      {/* Editor Content */}
+      <div className="min-h-0 flex-1 relative bg-card/40 backdrop-blur-sm">
         {tab === 'code' ? (
           <Editor
             height="100%"
@@ -162,17 +172,29 @@ export function InterviewWorkspace({ sessionId, activeModality }: { sessionId: s
             theme="vs-dark"
             value={code}
             onChange={(value) => { dirty.current.code = true; setCode(value ?? ''); }}
-            options={{ minimap: { enabled: false }, fontSize: 14, scrollBeyondLastLine: false }}
+            options={{ minimap: { enabled: false }, fontSize: 14, scrollBeyondLastLine: false, padding: { top: 16 } }}
+            className="absolute inset-0"
           />
         ) : (
-          <ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect} fitView>
-            <Background />
-            <Controls />
+          <ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={onConnect} fitView className="absolute inset-0">
+            <Background color="hsl(var(--border))" gap={16} />
+            <Controls className="bg-surface/80 fill-foreground ring-1 ring-border/50 backdrop-blur-md" />
           </ReactFlow>
         )}
       </div>
-      <div className="border-t border-border px-3 py-2 text-xs text-muted-foreground">{status}</div>
-      {testOutput && <pre className="max-h-28 overflow-auto border-t border-border bg-black p-2 text-xs text-green-300">{testOutput}</pre>}
+
+      {/* Workspace Footer */}
+      <div className="flex shrink-0 items-center justify-between border-t border-border/40 bg-surface/50 px-5 py-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground backdrop-blur-md">
+        <span>{status}</span>
+        {activeModality === 'scenario' && <span className="text-primary">Scenario Active</span>}
+      </div>
+
+      {/* Test Output Overlay */}
+      {testOutput && (
+        <div className="max-h-40 overflow-auto border-t border-primary/20 bg-black/90 p-4 font-mono text-xs leading-relaxed text-green-400 shadow-[inset_0_5px_15px_rgba(0,0,0,0.5)] backdrop-blur-xl">
+          <pre>{testOutput}</pre>
+        </div>
+      )}
     </div>
   );
 }

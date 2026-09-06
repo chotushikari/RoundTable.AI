@@ -20,6 +20,27 @@ export const DifficultySchema = z.union([
 ]);
 export type Difficulty = z.infer<typeof DifficultySchema>;
 
+export const ChallengeVectorSchema = z.object({
+  technicalDepth: DifficultySchema.default(3),
+  ambiguity: DifficultySchema.default(3),
+  scale: DifficultySchema.default(3),
+  edgeCaseComplexity: DifficultySchema.default(3),
+  businessComplexity: DifficultySchema.default(3),
+  timePressure: DifficultySchema.default(2),
+  crossFunctionalComplexity: DifficultySchema.default(3),
+});
+export type ChallengeVector = z.infer<typeof ChallengeVectorSchema>;
+
+export const DEFAULT_CHALLENGE_VECTOR: ChallengeVector = {
+  technicalDepth: 3,
+  ambiguity: 3,
+  scale: 3,
+  edgeCaseComplexity: 3,
+  businessComplexity: 3,
+  timePressure: 2,
+  crossFunctionalComplexity: 3,
+};
+
 export const ModalitySchema = z.enum(['voice', 'code', 'canvas', 'scenario']);
 export type InterviewModality = z.infer<typeof ModalitySchema>;
 
@@ -234,6 +255,16 @@ export type CompetencyState = Record<
   }
 >;
 
+export interface AccumulatedContradiction {
+  turnId: string;
+  priorTurnId?: string;
+  priorQuote: string;
+  currentQuote: string;
+  explanation: string;
+  detectedAt: string;
+  resolved: boolean;
+}
+
 export interface InterviewDefinitionRecord extends InterviewCreateInput {
   id: string;
   organizationId: string;
@@ -292,6 +323,10 @@ export interface InterviewSessionRecord {
   askedMustAsk: string[];
   coveredTopics: string[];
   pendingQuestion: string | null;
+  /** Accumulated contradictions detected across all turns (not just the latest). */
+  accumulatedContradictions: AccumulatedContradiction[];
+  /** Multi-dimensional challenge vector, updated per turn. */
+  challengeVector: ChallengeVector;
   stateVersion: number;
   toolRunCount: number;
   startedAt: string;

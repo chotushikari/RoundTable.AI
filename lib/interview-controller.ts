@@ -5,6 +5,8 @@ import { executeWorkspaceTool } from '@/lib/workspace-tools';
 import { resumeVerificationObjective } from '@/lib/resume';
 import { DEMO_CLOSING, demoRoles } from '@/lib/interview-demo';
 import type {
+  AccumulatedContradiction,
+  ChallengeVector,
   CompetencyState,
   ControllerDecision,
   Difficulty,
@@ -16,7 +18,7 @@ import type {
   TranscriptTurnRecord,
   TurnAnalysisRecord,
 } from '@/types/interview';
-import { PanelTurnAnalysisSchema } from '@/types/interview';
+import { DEFAULT_CHALLENGE_VECTOR, PanelTurnAnalysisSchema } from '@/types/interview';
 
 const ROLE_LABEL: Record<PanelRole, string> = {
   technical: 'Technical interviewer',
@@ -243,6 +245,7 @@ export function updateCompetencyState(
   analysis: PanelTurnAnalysis,
 ): CompetencyState {
   const next: CompetencyState = { ...current };
+  const delta = analysis.recommendedDifficultyDelta; // NOW APPLIED
   for (const competency of plan.competencies) {
     const existing = current[competency.id] ?? {
       rating: null,
@@ -254,15 +257,28 @@ export function updateCompetencyState(
     };
     const signal = analysis.competencyEvidence.find((item) => item.competencyId === competency.id);
     if (!signal || signal.rating === null || signal.confidence < 0.7) {
-      next[competency.id] = existing;
+      // Apply LLM delta even without a high-confidence signal — gentle nudge
+      if (delta !== 0) {
+        next[competency.id] = {
+          ...existing,
+          difficulty: clampDifficulty(existing.difficulty + delta * 0.5),
+        };
+      } else {
+        next[competency.id] = existing;
+      }
       continue;
     }
     const high = signal.rating >= 3;
     const highStreak = high ? existing.highConfidenceStreak + 1 : 0;
     const lowStreak = high ? 0 : existing.lowConfidenceStreak + 1;
     let difficulty = existing.difficulty;
+    // Streak-based ratchet (requires 2 consistent signals)
     if (highStreak >= 2) difficulty = clampDifficulty(existing.difficulty + 1);
     if (lowStreak >= 2) difficulty = clampDifficulty(existing.difficulty - 1);
+    // Apply LLM recommended delta as a secondary modifier (bounded to ±1)
+    if (delta !== 0 && highStreak < 2 && lowStreak < 2) {
+      difficulty = clampDifficulty(difficulty + delta);
+    }
     next[competency.id] = {
       rating: signal.rating,
       confidence: signal.confidence,
@@ -273,6 +289,27 @@ export function updateCompetencyState(
     };
   }
   return next;
+}
+
+export function updateChallengeVector(
+  current: ChallengeVector,
+  analysis: PanelTurnAnalysis,
+  decision: ControllerDecision,
+): ChallengeVector {
+  const delta = analysis.recommendedDifficultyDelta;
+  if (delta === 0) return current;
+  const isTechnical = decision.activeSpeakerRole === 'technical';
+  const isProduct = decision.activeSpeakerRole === 'product' || decision.activeSpeakerRole === 'customer';
+  const isCrossFunctional = decision.reasonCode === 'cross_functional_gap';
+  return {
+    technicalDepth: isTechnical ? clampDifficulty(current.technicalDepth + delta) : current.technicalDepth,
+    ambiguity: analysis.vague ? clampDifficulty(current.ambiguity - 1) : current.ambiguity,
+    scale: decision.modality === 'canvas' ? clampDifficulty(current.scale + delta) : current.scale,
+    edgeCaseComplexity: isTechnical ? clampDifficulty(current.edgeCaseComplexity + delta) : current.edgeCaseComplexity,
+    businessComplexity: isProduct ? clampDifficulty(current.businessComplexity + delta) : current.businessComplexity,
+    timePressure: current.timePressure,
+    crossFunctionalComplexity: isCrossFunctional ? clampDifficulty(current.crossFunctionalComplexity + 1) : current.crossFunctionalComplexity,
+  };
 }
 
 function balancedRole(session: InterviewSessionRecord, roles: PanelRole[], analyses: TurnAnalysisRecord[]): PanelRole {
@@ -582,6 +619,26 @@ export async function processCandidateTurn({
   const coveredTopics = [...new Set([...session.coveredTopics, ...evaluated.analysis.addressedTopics])];
   const consecutiveRoleTurns = decision.activeSpeakerRole === session.activeRole ? session.consecutiveRoleTurns + 1 : 1;
 
+  const newContradictions: AccumulatedContradiction[] = analysisForDecision.contradictions.map((c) => ({
+    turnId: candidateTurn.id,
+    priorTurnId: c.priorTurnId,
+    priorQuote: c.priorQuote,
+    currentQuote: c.currentQuote,
+    explanation: c.explanation,
+    detectedAt: new Date().toISOString(),
+    resolved: false,
+  }));
+  // Mark prior contradictions as resolved if this turn's quotes are not conflicting them
+  const priorContradictions = (session.accumulatedContradictions ?? []).map((prior) =>
+    analysisForDecision.contradictions.length === 0 ? { ...prior, resolved: true } : prior,
+  );
+  const accumulatedContradictions = [...priorContradictions, ...newContradictions].slice(-20);
+  const challengeVector = updateChallengeVector(
+    session.challengeVector ?? DEFAULT_CHALLENGE_VECTOR,
+    analysisForDecision,
+    decision,
+  );
+
   const sessionPatch = {
     previousRole: session.activeRole,
     activeRole: decision.activeSpeakerRole,
@@ -598,6 +655,8 @@ export async function processCandidateTurn({
     askedMustAsk,
     coveredTopics,
     pendingQuestion: spoken.text,
+    accumulatedContradictions,
+    challengeVector,
     stateVersion: effectiveSession.stateVersion + 1,
   } satisfies Partial<InterviewSessionRecord>;
 

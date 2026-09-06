@@ -1,7 +1,9 @@
 import { randomUUID } from 'crypto';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import type {
+  AccumulatedContradiction,
   AssessmentRecord,
+  ChallengeVector,
   FinalAssessment,
   InterviewCreateInput,
   InterviewDefinitionRecord,
@@ -15,6 +17,7 @@ import type {
   TurnAnalysisRecord,
   WorkspaceArtifactRecord,
 } from '@/types/interview';
+import { DEFAULT_CHALLENGE_VECTOR } from '@/types/interview';
 
 type MemoryDatabase = {
   interviews: Map<string, InterviewDefinitionRecord>;
@@ -121,6 +124,8 @@ function sessionFromRow(row: Record<string, unknown>): InterviewSessionRecord {
     askedMustAsk: (row.asked_must_ask ?? []) as string[],
     coveredTopics: (row.covered_topics ?? []) as string[],
     pendingQuestion: row.pending_question ? String(row.pending_question) : null,
+    accumulatedContradictions: (row.accumulated_contradictions ?? []) as AccumulatedContradiction[],
+    challengeVector: (row.challenge_vector as ChallengeVector | null) ?? DEFAULT_CHALLENGE_VECTOR,
     stateVersion: Number(row.state_version ?? 0),
     toolRunCount: Number(row.tool_run_count ?? 0),
     startedAt: String(row.started_at),
@@ -145,6 +150,8 @@ function sessionPatch(patch: Partial<InterviewSessionRecord>): Record<string, un
     ['askedMustAsk', 'asked_must_ask'],
     ['coveredTopics', 'covered_topics'],
     ['pendingQuestion', 'pending_question'],
+    ['accumulatedContradictions', 'accumulated_contradictions'],
+    ['challengeVector', 'challenge_vector'],
     ['stateVersion', 'state_version'],
     ['toolRunCount', 'tool_run_count'],
     ['startedAt', 'started_at'],
@@ -494,6 +501,8 @@ export const interviewStore = {
           competency_state: session.competencyState,
           asked_must_ask: session.askedMustAsk,
           covered_topics: session.coveredTopics,
+          accumulated_contradictions: session.accumulatedContradictions,
+          challenge_vector: session.challengeVector,
           state_version: session.stateVersion,
           tool_run_count: session.toolRunCount,
           started_at: session.startedAt,

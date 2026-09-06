@@ -9,6 +9,7 @@ import {
 } from '@/lib/interview-controller';
 import { buildFallbackPlan } from '@/lib/interview-planner';
 import type { InterviewDefinitionRecord, InterviewSessionRecord, PanelRole, PanelTurnAnalysis, TurnAnalysisRecord } from '@/types/interview';
+import { DEFAULT_CHALLENGE_VECTOR } from '@/types/interview';
 
 const interview: InterviewDefinitionRecord = {
   id: '00000000-0000-4000-8000-000000000010',
@@ -56,6 +57,8 @@ function session(overrides: Partial<InterviewSessionRecord> = {}): InterviewSess
     pendingQuestion: null,
     stateVersion: 0,
     toolRunCount: 0,
+    accumulatedContradictions: [],
+    challengeVector: DEFAULT_CHALLENGE_VECTOR,
     startedAt: new Date().toISOString(),
     completedAt: null,
     expiresAt: new Date(Date.now() + 60_000).toISOString(),

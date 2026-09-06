@@ -7,6 +7,7 @@ import { interviewStore } from '@/lib/interview-store';
 import { candidateCookieName, createCandidateGrant, createOpaqueToken, hashToken } from '@/lib/security';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import type { CompetencyState, InterviewSessionRecord } from '@/types/interview';
+import { DEFAULT_CHALLENGE_VECTOR } from '@/types/interview';
 import { DEFAULT_AGENT_UID } from '@/lib/agora';
 import { DEMO_OPENING_QUESTION, demoRoles } from '@/lib/interview-demo';
 
@@ -83,6 +84,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
       pendingQuestion: version.definition.demoMode ? DEMO_OPENING_QUESTION : null,
       stateVersion: 0,
       toolRunCount: 0,
+      accumulatedContradictions: [],
+      challengeVector: DEFAULT_CHALLENGE_VECTOR,
       startedAt,
       completedAt: null,
       expiresAt,

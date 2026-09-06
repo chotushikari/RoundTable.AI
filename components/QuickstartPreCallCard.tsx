@@ -32,20 +32,33 @@ export function QuickstartPreCallCard({
 }: QuickstartPreCallCardProps) {
   return (
     <div
-      className="mx-auto flex w-[min(92vw,26.25rem)] animate-fade-up flex-col items-center rounded-[20px] border border-[#2b2b2b] px-10 py-10 text-center shadow-[0_10px_24px_rgba(0,0,0,0.28)]"
-      style={{
-        backgroundImage:
-          'linear-gradient(164.988deg, rgba(54,54,54,0.2) 1.0596%, rgba(0,0,0,0) 96.089%), linear-gradient(90deg, rgb(16,16,16) 0%, rgb(16,16,16) 100%)',
-      }}
+      className="relative mx-auto flex w-[min(92vw,28rem)] animate-fade-up flex-col items-center rounded-3xl p-1 shadow-2xl overflow-hidden glass"
     >
-      <h1 className="text-[28px] font-medium leading-[1.2] text-white">
-        {interview ? `${interview.roleTitle} at ${interview.companyName ?? 'the hiring company'}` : 'Try Agora\'s Voice Agent'}
-      </h1>
-      <p className="mt-[14px] text-sm font-medium leading-6 text-muted-foreground">
-        {interview
-          ? `${interview.demoMode ? `One short answer per role; aim for 15–20 seconds each. Finishes after the panel, up to ${interview.durationMinutes} minutes` : `${interview.durationMinutes} minutes`} with ${interview.panelRoles.length} AI panel roles. A human reviews the evidence; the AI never makes a hiring decision.`
-          : `Built on Agora's flagship Conversational AI engine, for effortless agentic conversations.`}
-      </p>
+      {/* Animated gradient border */}
+      <div className="absolute inset-0 z-0 bg-gradient-to-br from-primary/50 via-background to-accent/50 opacity-20" />
+      <div className="absolute -left-1/2 top-0 h-[200%] w-[200%] animate-spin-slow bg-[conic-gradient(from_0deg,transparent_0_340deg,hsl(var(--primary))_360deg)] opacity-20" style={{ animationDuration: '8s' }} />
+      
+      <div className="relative z-10 flex w-full flex-col items-center rounded-[22px] bg-card/90 px-10 py-10 text-center backdrop-blur-xl">
+        <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 shadow-[0_0_30px_hsl(var(--primary)/0.3)] ring-1 ring-primary/30">
+          <svg className="h-8 w-8 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+          </svg>
+        </div>
+
+        <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+          {interview ? `${interview.roleTitle}` : 'Try Agora\'s Voice Agent'}
+        </h1>
+        {interview && (
+          <div className="mt-2 text-sm font-semibold uppercase tracking-widest text-primary">
+            {interview.companyName ?? 'The Hiring Company'}
+          </div>
+        )}
+        
+        <p className="mt-5 text-sm font-medium leading-relaxed text-muted-foreground">
+          {interview
+            ? `${interview.demoMode ? `One short answer per role; aim for 15–20 seconds each. Finishes after the panel, up to ${interview.durationMinutes} minutes` : `${interview.durationMinutes} minutes`} with ${interview.panelRoles.length} AI panel roles. A human reviews the evidence; the AI never makes a hiring decision.`
+            : `Built on Agora's flagship Conversational AI engine, for effortless agentic conversations.`}
+        </p>
 
       {requiresConsent && (
         <>
@@ -73,26 +86,26 @@ export function QuickstartPreCallCard({
         </>
       )}
 
-      <Button
-        onClick={onStartConversation}
-        disabled={isLoading || (requiresConsent && !consent)}
-        className="mt-12 h-10 w-full rounded-lg border border-primary bg-primary text-sm font-medium text-black hover:border-white hover:bg-white hover:text-black disabled:hover:border-primary disabled:hover:bg-primary disabled:hover:text-black"
-        aria-label={
-          isLoading
-            ? 'Starting conversation with AI agent'
-            : 'Start conversation with AI agent'
-        }
-      >
-        {isLoading ? (
-          <>
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Starting...
-          </>
-        ) : (
-          interview ? 'Start AI Interview' : 'Start Conversation'
-        )}
-      </Button>
-      {error && <p className="mt-3 text-xs text-destructive">{error}</p>}
+        <Button
+          onClick={onStartConversation}
+          disabled={isLoading || (requiresConsent && !consent)}
+          className="group relative mt-10 h-12 w-full overflow-hidden rounded-xl border border-primary/50 bg-primary/10 text-sm font-bold text-primary transition-all duration-300 hover:bg-primary hover:text-primary-foreground hover:shadow-[0_0_30px_hsl(var(--primary)/0.4)] disabled:opacity-50 disabled:hover:bg-primary/10 disabled:hover:text-primary disabled:hover:shadow-none"
+          aria-label={isLoading ? 'Starting conversation' : 'Start conversation'}
+        >
+          <div className="absolute inset-0 flex h-full w-full justify-center [transform:skew(-12deg)_translateX(-150%)] group-hover:duration-1000 group-hover:[transform:skew(-12deg)_translateX(150%)]">
+            <div className="relative h-full w-8 bg-white/20" />
+          </div>
+          {isLoading ? (
+            <span className="flex items-center gap-2">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              Starting...
+            </span>
+          ) : (
+            interview ? 'Start AI Interview' : 'Start Conversation'
+          )}
+        </Button>
+        {error && <p className="mt-4 text-xs font-semibold text-destructive">{error}</p>}
+      </div>
     </div>
   );
 }
