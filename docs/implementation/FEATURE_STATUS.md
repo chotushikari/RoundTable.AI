@@ -4,12 +4,12 @@ Classification per `docs/25` §4: REAL / PARTIAL / UI_ONLY / SCRIPTED / UNVERIFI
 
 | # | Requirement | Class | Evidence |
 |---|---|---|---|
-| 1 | Agora realtime voice | **REAL** | Full RTC/RTM lifecycle in `ConversationComponent.tsx`; reseller STT/TTS; agent sessions; metrics; typecheck/build green |
-| 2 | Interruption / barge-in | **REAL** | Agora VAD (`interrupt_duration_ms: 160`) in `invite-agent`; `INTERRUPTED` events logged client-side |
+| 1 | Agora realtime voice | **PARTIAL** | Server token/invite/stop smoke passed and RTC/RTM lifecycle is implemented, but browser live join failed with `GET_LOCAL_CONNECTION_PARAMS_FAILED`; no live speech exchange was demonstrated |
+| 2 | Interruption / barge-in | **UNVERIFIED** | Agora VAD (`interrupt_duration_ms: 160`) and `INTERRUPTED` logging exist, but the RTC failure prevented a live interruption test |
 | 3 | Multiple roles | **PARTIAL** | 5 personas + arbitration + per-turn prompt injection all real (`personas.ts`, `orchestrator.ts`, `prompt.ts`) — but live rotation is dead: state stays v0 → `warmup_technical` every turn |
 | 4 | Shared Candidate State | **PARTIAL** | Versioned immutable rows + idempotent events + real read path; **write path beyond v0 missing** |
 | 5 | Dynamic follow-up | **PARTIAL** | Proxy grounds each turn in the actual transcript; objective static (`warmup_technical`) due to the state gap |
-| 6 | Controlled turn-taking | **REAL** | Agora `turnDetection` + one-question-per-turn guardrail in `GLOBAL_RULES` |
+| 6 | Controlled turn-taking | **PARTIAL** | Agora `turnDetection` + one-question-per-turn guardrail in `GLOBAL_RULES`; live behavior unverified because RTC join failed |
 | 7 | Scenario / roleplay | **UI_ONLY** | Customer persona is roleplay-styled in prompts; no scenario task system or modality surface |
 | 8 | Continuous challenge adaptation | **MISSING** | `ChallengeVector` schema only — never written, never drives decisions |
 | 9 | Vague-answer detection | **MISSING** | `VAGUENESS_DETECTED` event type defined; no detector (only soft persona instruction) |
@@ -27,4 +27,4 @@ Classification per `docs/25` §4: REAL / PARTIAL / UI_ONLY / SCRIPTED / UNVERIFI
 | End interview → final assessment | **MISSING** — schema only |
 
 ## Working infrastructure (KEEP list)
-Agora voice path, token routes, invite-agent scaffold, proxy control plane (R2), event backbone (R1), personas, prompt assembly, recruiter Control Room, brand system, Monaco workspace shell, graceful DB degradation.
+Agora token routes, invite-agent scaffold, proxy control plane (R2, inactive locally until `NEXT_PUBLIC_APP_URL` is set), event backbone (R1), personas, prompt assembly, recruiter Control Room, brand system, Monaco workspace shell, graceful DB degradation.

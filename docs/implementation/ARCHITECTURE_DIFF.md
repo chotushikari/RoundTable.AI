@@ -4,7 +4,7 @@ North star (docs/25 §5) vs. reality:
 
 ```
 CANDIDATE UI ──────────────── ✅ real (interview room, disclosure gate, workspace)
-AGORA CONVO AI ────────────── ✅ real; custom-LLM proxy as control plane (strong)
+AGORA CONVO AI ────────────── ⚠️ server lifecycle real; browser RTC join failed; local custom proxy inactive without NEXT_PUBLIC_APP_URL
 INTERVIEW CORE
   ├ Candidate State ───────── ⚠️  half: versioned store, no writer past v0 (R3)
   ├ Evidence ──────────────── ❌   tables only
@@ -15,7 +15,7 @@ INTERVIEW CORE
   └ Interview Budget ───────── ❌   time_budget always null
 ROLE POLICIES ─────────────── ✅   5 personas as config (blueprint-conformant)
 MODALITY
-  ├ Voice ─────────────────── ✅
+  ├ Voice ─────────────────── ⚠️   implemented; browser live join failed in this audit
   ├ Code ──────────────────── ⚠️   workspace real; no executor, no TEST_RESULT
   ├ Canvas/Design ─────────── ❌
   ├ Scenario ──────────────── ❌
@@ -26,7 +26,7 @@ CONTROL ROOM (judge UX) ───── ✅   early version polling persisted ev
 ```
 
 ## Where the architecture already matches the blueprint
-- One continuous Agora session with runtime perspective shifts via the proxy (preferred over agent handoff — docs/25 §6) ✅
+- One continuous Agora session with runtime perspective shifts via the proxy (preferred over agent handoff — docs/25 §6) ⚠️ implemented, but local env currently falls back to managed OpenAI unless `NEXT_PUBLIC_APP_URL` is set
 - Two-speed split: deterministic action selection on the hot path; deep analysis designated off-path (but the deep path is not yet built) ⚠️
 - Zod at AI boundaries ✅ · idempotent events ✅ · versioned state ✅ · graceful degradation without DB ✅
 

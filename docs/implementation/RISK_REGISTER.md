@@ -10,5 +10,5 @@
 | 6 | Disclosure not event-logged | 🟡 P2 | `AI_DISCLOSURE_SHOWN` never emitted — compliance unprovable in replay | Emit from `QuickstartPreCallCard` start handler |
 | 7 | Model pin drift | 🟡 P2 | Code pins `gemini-2.0-flash`; earlier sprints referenced newer models | Confirm intended model + update `MODEL_ID` |
 | 8 | Voice-path DB reads per turn | 🟡 P2 | Proxy does 2 Supabase reads/turn before streaming | Acceptable; instrument latency per docs/17 during R9 |
-| 9 | No live-run evidence this pass | 🟡 P2 | Voice session/browser console/server logs unverified during audit (tool outage) | Live smoke test immediately after deploy |
+| 9 | Browser RTC join failure | 🟠 P1 | Candidate start flow reached the room and invited the agent, but browser RTC join failed with `GET_LOCAL_CONNECTION_PARAMS_FAILED: Error: Invalid space at 12`; transcript/audio/interruption remain unverified | Debug Agora RTC join parameters/browser SDK behavior before claiming live voice complete |
 | 10 | Stale `index.lock` incident | 🟡 P2 | A crashed git process left `.git/index.lock` (2026-09-05 19:44); removed safely 2026-09-06 | None — resolved; noted for provenance |
