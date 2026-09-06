@@ -6,6 +6,8 @@ On Vercel, `VERCEL_PROJECT_PRODUCTION_URL` (falling back to `VERCEL_URL`) takes 
 
 For a time-limited public submission, `NEXT_PUBLIC_DISABLE_COMPANY_AUTH=true` bypasses the company email gate without switching to process-local storage. The server creates or reuses `PUBLIC_DEMO_ORGANIZATION_ID` (or the fixed demo UUID). This deliberately exposes that organization's company dashboard and completed reports; unset the flag after judging.
 
+When using the configured ngrok development tunnel, restart `npm run dev` after changing its hostname. The hostname is allow-listed through Next's development-only `allowedDevOrigins` setting so HMR and development assets can load through the tunnel.
+
 Set `ENABLE_HOMEPAGE_VOICE_DEMO=true` on Vercel only when the public one-question sample should be available. The sample uses Agora reseller STT/LLM/TTS through the original token/start/stop boundary and has no Supabase interview record. Keep it false when the homepage should remain visual-only.
 
 Vercel invokes `/api/cron/retention` daily with `CRON_SECRET`; the route runs the Supabase cleanup function. Groq evaluator, speaker, planner, and assessment models are independently configurable; structured requests use bounded completion budgets and rate-limit failures retain deterministic evidence-only output. Monitor session start failures, RTC connection state, agent errors, evaluator fallbacks, CAS conflicts, interruption events, role transitions, tool latency, E2B failures, and assessment completion. Never log bearer tokens, resumes, full prompts, or raw media.
