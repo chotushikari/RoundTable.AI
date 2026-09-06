@@ -50,6 +50,25 @@ export async function listEvents(interviewId: string): Promise<InterviewEvent[]>
   return data as unknown as InterviewEvent[];
 }
 
+/** Most recent event of a given type for an interview (newest by row id). */
+export async function getLatestEventOfType(
+  interviewId: string,
+  eventType: string,
+): Promise<InterviewEvent | null> {
+  if (!isDbConfigured()) return null;
+  const db = getServiceClient();
+  const { data, error } = await db
+    .from('interview_events')
+    .select('*')
+    .eq('interview_id', interviewId)
+    .eq('event_type', eventType)
+    .order('id', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data) return null;
+  return data as unknown as InterviewEvent;
+}
+
 // ── Candidate state (versioned; latest = max version) ──
 export async function getLatestState(
   interviewId: string,

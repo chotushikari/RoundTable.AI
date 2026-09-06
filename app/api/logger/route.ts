@@ -1,7 +1,15 @@
 import { NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
-import { appendEvent, ensureInterview } from '@/lib/db/repository';
-import type { InterviewEvent } from '@/lib/interview/types';
+import {
+  appendEvent,
+  ensureInterview,
+  getLatestEventOfType,
+} from '@/lib/db/repository';
+import { isCanvasModality, selectCodeTask } from '@/lib/interview/problems';
+import type {
+  InterviewEvent,
+  NextInterviewAction,
+} from '@/lib/interview/types';
 
 /**
  * Event sink for the interview. The client posts structured events; we persist
@@ -44,7 +52,20 @@ export async function POST(request: Request) {
       };
 
       const result = await appendEvent(event);
-      return NextResponse.json({ success: true, persisted: result.ok, deduped: result.deduped });
+
+      // ── Multimodal routing (Sprint 06) ──────────────────────────────────
+      // The control plane records its chosen action as NEXT_ACTION_SELECTED.
+      // When that action is a canvas modality (code/debug/design), tell the
+      // frontend to open the workspace and which stub to load. We only fire
+      // this ONCE per decision by comparing against the last CODE_TASK_OPENED.
+      const ui = await resolveWorkspaceCommand(data.interview_id);
+
+      return NextResponse.json({
+        success: true,
+        persisted: result.ok,
+        deduped: result.deduped,
+        ...ui,
+      });
     }
 
     // No interview_id yet (legacy path) — accept the event but don't persist.
@@ -52,6 +73,88 @@ export async function POST(request: Request) {
   } catch (err) {
     console.error('[logger] failed:', err);
     return NextResponse.json({ error: 'Failed to parse event' }, { status: 400 });
+  }
+}
+
+type WorkspaceCommand = {
+  newModality?: 'voice' | 'code';
+  codeTask?: {
+    id: string;
+    title: string;
+    language: string;
+    starterCode: string;
+    kind: string;
+  };
+};
+
+/**
+ * Decide whether the frontend should open (or close) the code workspace, based
+ * on the control plane's most recent decision. Idempotent per decision: we
+ * append a CODE_TASK_OPENED event keyed by the decision's row so a repeated
+ * poll doesn't re-open the same task. Returns {} when nothing should change,
+ * so the voice path is unaffected.
+ */
+async function resolveWorkspaceCommand(
+  interviewId: string,
+): Promise<WorkspaceCommand> {
+  try {
+    const decisionEvt = await getLatestEventOfType(
+      interviewId,
+      'NEXT_ACTION_SELECTED',
+    );
+    if (!decisionEvt) return {};
+
+    const payload = (decisionEvt.payload ?? {}) as Partial<NextInterviewAction>;
+    const modality = payload.modality;
+
+    // Not a canvas turn → make sure we're in voice.
+    if (!isCanvasModality(modality)) {
+      return { newModality: 'voice' };
+    }
+
+    // Canvas turn: has the workspace already been opened for THIS decision?
+    const lastOpened = await getLatestEventOfType(interviewId, 'CODE_TASK_OPENED');
+    const decisionKey = String(decisionEvt.sequence ?? decisionEvt.event_id);
+    const openedKey =
+      (lastOpened?.payload as { decision_key?: string } | undefined)
+        ?.decision_key ?? null;
+
+    const task = selectCodeTask({
+      ...(payload as NextInterviewAction),
+      modality: modality!,
+    });
+
+    // Emit CODE_TASK_OPENED once per decision (fire-and-forget).
+    if (openedKey !== decisionKey) {
+      const evt: InterviewEvent = {
+        event_id: randomUUID(),
+        interview_id: interviewId,
+        event_type: 'CODE_TASK_OPENED',
+        source: 'code',
+        occurred_at: new Date().toISOString(),
+        payload: {
+          decision_key: decisionKey,
+          task_id: task.id,
+          title: task.title,
+          competency: payload.competency ?? null,
+        },
+      };
+      void appendEvent(evt).catch(() => {});
+    }
+
+    return {
+      newModality: 'code',
+      codeTask: {
+        id: task.id,
+        title: task.title,
+        language: task.language,
+        starterCode: task.starterCode,
+        kind: task.kind,
+      },
+    };
+  } catch (err) {
+    console.error('[logger] resolveWorkspaceCommand failed:', err);
+    return {};
   }
 }
 

@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
-import { CodeWorkspace } from './CodeWorkspace';
+import { CodeWorkspace, type CodeWorkspaceTask } from './CodeWorkspace';
 
 type QuickstartConversationLayoutProps = {
   statusPanel: ReactNode;
@@ -13,6 +13,8 @@ type QuickstartConversationLayoutProps = {
   controls: ReactNode;
   onEndConversation: () => void;
   activeModality?: 'voice' | 'code';
+  codeTask?: CodeWorkspaceTask | null;
+  onSubmitCode?: (code: string) => void;
 };
 
 export function QuickstartConversationLayout({
@@ -23,6 +25,8 @@ export function QuickstartConversationLayout({
   controls,
   onEndConversation,
   activeModality = 'voice',
+  codeTask,
+  onSubmitCode,
 }: QuickstartConversationLayoutProps) {
   return (
     <div className="flex min-h-0 flex-1 flex-col text-left">
@@ -78,7 +82,7 @@ export function QuickstartConversationLayout({
         {activeModality === 'code' && (
           <section className="order-2 flex min-h-0 flex-1 flex-col lg:order-3 lg:border-l lg:border-border/80 lg:pl-6">
             <div className="flex h-full w-full py-3 md:pb-6">
-              <CodeWorkspace />
+              <CodeWorkspace task={codeTask} onSubmit={onSubmitCode} />
             </div>
           </section>
         )}

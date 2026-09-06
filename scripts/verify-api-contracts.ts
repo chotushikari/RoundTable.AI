@@ -105,11 +105,9 @@ async function verifyGenerateAgoraTokenReplacesZeroUid() {
 async function verifyChatCompletionsMissingEnv() {
   const { createChatCompletionsHandler } =
     await import('../app/api/chat/completions/route');
-  const originalApiKey = process.env.NEXT_LLM_API_KEY;
-  const originalUrl = process.env.NEXT_LLM_URL;
+  const originalApiKey = process.env.GEMINI_API_KEY;
 
-  delete process.env.NEXT_LLM_API_KEY;
-  delete process.env.NEXT_LLM_URL;
+  delete process.env.GEMINI_API_KEY;
 
   const handler = createChatCompletionsHandler({
     createOpenAIClient: (() => {
@@ -136,19 +134,14 @@ async function verifyChatCompletionsMissingEnv() {
       'POST /api/chat/completions should reject missing LLM env',
     );
     assert(
-      body.error === 'NEXT_LLM_API_KEY and NEXT_LLM_URL must be set',
+      body.error === 'GEMINI_API_KEY must be set',
       'POST /api/chat/completions should explain missing LLM env',
     );
   } finally {
     if (originalApiKey === undefined) {
-      delete process.env.NEXT_LLM_API_KEY;
+      delete process.env.GEMINI_API_KEY;
     } else {
-      process.env.NEXT_LLM_API_KEY = originalApiKey;
-    }
-    if (originalUrl === undefined) {
-      delete process.env.NEXT_LLM_URL;
-    } else {
-      process.env.NEXT_LLM_URL = originalUrl;
+      process.env.GEMINI_API_KEY = originalApiKey;
     }
   }
 }
@@ -156,10 +149,8 @@ async function verifyChatCompletionsMissingEnv() {
 async function verifyChatCompletionsInvalidJson() {
   const { createChatCompletionsHandler } =
     await import('../app/api/chat/completions/route');
-  const originalApiKey = process.env.NEXT_LLM_API_KEY;
-  const originalUrl = process.env.NEXT_LLM_URL;
-  process.env.NEXT_LLM_API_KEY = 'test-key';
-  process.env.NEXT_LLM_URL = 'https://example.test/v1/chat/completions';
+  const originalApiKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-key';
 
   const handler = createChatCompletionsHandler({
     createOpenAIClient: (() => {
@@ -191,14 +182,9 @@ async function verifyChatCompletionsInvalidJson() {
     );
   } finally {
     if (originalApiKey === undefined) {
-      delete process.env.NEXT_LLM_API_KEY;
+      delete process.env.GEMINI_API_KEY;
     } else {
-      process.env.NEXT_LLM_API_KEY = originalApiKey;
-    }
-    if (originalUrl === undefined) {
-      delete process.env.NEXT_LLM_URL;
-    } else {
-      process.env.NEXT_LLM_URL = originalUrl;
+      process.env.GEMINI_API_KEY = originalApiKey;
     }
   }
 }
@@ -206,14 +192,13 @@ async function verifyChatCompletionsInvalidJson() {
 async function verifyChatCompletionsSseDone() {
   const { createChatCompletionsHandler } =
     await import('../app/api/chat/completions/route');
-  const originalApiKey = process.env.NEXT_LLM_API_KEY;
-  const originalUrl = process.env.NEXT_LLM_URL;
-  process.env.NEXT_LLM_API_KEY = 'test-key';
-  process.env.NEXT_LLM_URL = 'https://example.test/v1/chat/completions';
+  const originalApiKey = process.env.GEMINI_API_KEY;
+  process.env.GEMINI_API_KEY = 'test-key';
 
   let capturedBaseUrl: string | undefined;
   let capturedModelId: string | undefined;
   let capturedMessages: unknown;
+  let capturedSystem: unknown;
 
   const handler = createChatCompletionsHandler({
     createOpenAIClient: ((options: { baseURL?: string }) => {
@@ -223,8 +208,9 @@ async function verifyChatCompletionsSseDone() {
         return { modelId };
       };
     }) as never,
-    streamTextImpl: ((options: { messages?: unknown }) => {
+    streamTextImpl: ((options: { messages?: unknown; system?: unknown }) => {
       capturedMessages = options.messages;
+      capturedSystem = options.system;
       return {
         textStream: (async function* () {
           yield 'hello';
@@ -257,17 +243,21 @@ async function verifyChatCompletionsSseDone() {
       'POST /api/chat/completions should return SSE content type',
     );
     assert(
-      capturedBaseUrl === 'https://example.test/v1',
-      'POST /api/chat/completions should pass base URL without /chat/completions',
+      capturedBaseUrl === 'https://generativelanguage.googleapis.com/v1beta/openai',
+      'POST /api/chat/completions should target the Gemini OpenAI-compat base URL',
     );
     assert(
-      capturedModelId === 'gpt-4o',
-      'POST /api/chat/completions should route to the pinned server model',
+      capturedModelId === 'gemini-2.0-flash',
+      'POST /api/chat/completions should route to the pinned Gemini model',
     );
     assert(
       JSON.stringify(capturedMessages) ===
         JSON.stringify([{ role: 'user', content: 'Hi' }]),
       'POST /api/chat/completions should pass request messages to streamText',
+    );
+    assert(
+      typeof capturedSystem === 'string' && (capturedSystem as string).length > 0,
+      'POST /api/chat/completions should inject a control-plane system prompt',
     );
     assert(
       text.includes('data: [DONE]'),
@@ -279,14 +269,9 @@ async function verifyChatCompletionsSseDone() {
     );
   } finally {
     if (originalApiKey === undefined) {
-      delete process.env.NEXT_LLM_API_KEY;
+      delete process.env.GEMINI_API_KEY;
     } else {
-      process.env.NEXT_LLM_API_KEY = originalApiKey;
-    }
-    if (originalUrl === undefined) {
-      delete process.env.NEXT_LLM_URL;
-    } else {
-      process.env.NEXT_LLM_URL = originalUrl;
+      process.env.GEMINI_API_KEY = originalApiKey;
     }
   }
 }
