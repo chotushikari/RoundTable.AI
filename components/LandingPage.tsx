@@ -98,6 +98,7 @@ export default function LandingPage() {
           body: JSON.stringify({
             requester_id: responseData.uid,
             channel_name: responseData.channel,
+            interview_id: responseData.interview_id,
           } as ClientStartRequest),
         })
           .then(async (res) => {

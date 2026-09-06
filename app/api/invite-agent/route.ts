@@ -11,35 +11,20 @@ import {
 import { ClientStartRequest, AgentResponse } from '@/types/conversation';
 import { DEFAULT_AGENT_UID } from '@/lib/agora';
 
-// System prompt that defines the agent's personality and behavior.
-// Swap this out to change what the agent talks about.
-const ADA_PROMPT = `You are **Ada**, an agentic developer advocate from **Agora**. You help developers understand and build with Agora's Conversational AI platform.
-
-# What Agora Actually Is
-Agora is a real-time communications company. The product you represent is the **Agora Conversational AI Engine** — it lets developers add voice AI agents to any app by connecting ASR, LLM, and TTS into a real-time pipeline over Agora's SD-RTN (Software Defined Real-Time Network). Key facts:
-- The product is called the **Conversational AI Engine** (not "Chorus", not "Harmony", or any other name you might invent)
-- It runs a full ASR → LLM → TTS pipeline with sub-500ms latency
-- It supports Deepgram, Microsoft, and others for ASR; OpenAI, Anthropic, and others for LLM; ElevenLabs, Microsoft, and others for TTS
-- Agora's SD-RTN is its global real-time network infrastructure — not "SDRTN"
-- MCP in this context means **Model Context Protocol** (Anthropic's open standard for connecting AI models to tools/data), not "multi-channel processing"
-- Agora does not have a product called Chorus, Harmony, or any similar name — do not invent product names
-
-# Honesty Rule
-If you don't know a specific fact about Agora, say so plainly and suggest checking docs.agora.io. Never invent product names, feature names, or capabilities.
-
-# Persona & Tone
-- Friendly, technically credible, concise. You're a peer who builds things, not a support agent.
-- Plain English. No marketing fluff.
-
-# Core Behavior Guidelines
-- **Default to brief**: This is a voice conversation. Keep most replies to 1–2 sentences. Only go longer if the user explicitly asks for detail or the answer genuinely requires it.
-- **Never list or enumerate**: No bullet points, no numbered steps. Say the single most important thing.
-- **Clarify before answering**: For anything complex, ask one focused question first.
-- **Ask at most one question per turn**: Never stack questions.
-- **Guide, don't lecture**: Unlock the next step, not everything at once.`;
+/**
+ * Fallback/base instructions given to Agora at session start.
+ *
+ * IMPORTANT (R2): the REAL per-turn behavior — active interviewer persona,
+ * shared candidate state, objective, and guardrails — is injected by our
+ * custom-LLM proxy (`/api/chat/completions`) on every turn. Agora is pointed at
+ * that proxy via BYOK below, so this string is only a safety-net identity in
+ * case a turn reaches the model without proxy augmentation. Keep it minimal and
+ * consistent with the proxy's rules.
+ */
+const BASE_INSTRUCTIONS = `You are the interviewer for RoundTable, a live voice interview. Speak naturally and concisely (1–3 sentences), ask at most one question per turn, and base every follow-up on what the candidate actually said. You are one interviewer whose perspective may shift between turns; never mention roles, scores, or that you are an AI panel.`;
 
 // First thing the agent says when a user joins the channel.
-const GREETING = `Hi there! I'm Ada, your virtual assistant from Agora. How can I help?`;
+const GREETING = `Hi, welcome. Thanks for making the time today. To get us started, tell me a bit about something you've built recently that you're proud of.`;
 
 // agentUid identifies the AI in the RTC channel and shares its default with the client.
 const agentUid = String(DEFAULT_AGENT_UID);
@@ -55,12 +40,22 @@ export async function POST(request: NextRequest) {
     // --- 1. Parse request ---
 
     const body: ClientStartRequest = await request.json();
-    const { requester_id, channel_name } = body;
+    const { requester_id, channel_name, interview_id } = body;
 
     // Validate required env vars on first request so misconfiguration surfaces
     // with a clear error message rather than a silent failure.
     const appId = requireEnv('NEXT_PUBLIC_AGORA_APP_ID');
     const appCertificate = requireEnv('NEXT_AGORA_APP_CERTIFICATE');
+
+    // The custom-LLM proxy (control plane) that drives shared-brain personas.
+    // Agora calls this per turn; we thread interview_id so the proxy can load
+    // the right CandidateState. PUBLIC_APP_URL must be the deployment's base URL
+    // (e.g. https://roundtable-ai-git-piyush-you.vercel.app) so Agora's servers
+    // can reach it — localhost will NOT work from Agora's cloud.
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '');
+    const proxyUrl = appUrl
+      ? `${appUrl}/api/chat/completions${interview_id ? `?interview_id=${encodeURIComponent(interview_id)}` : ''}`
+      : undefined;
 
     if (!channel_name || !requester_id) {
       return NextResponse.json(
@@ -83,7 +78,7 @@ export async function POST(request: NextRequest) {
     // Omit vendor API keys for supported models — AgentKit infers reseller presets on start (see Agora Console / billing).
     const agent = new Agent({
       client,
-      instructions: ADA_PROMPT,
+      instructions: BASE_INSTRUCTIONS,
       greeting: GREETING,
       failureMessage: 'Please wait a moment.',
       maxHistory: 50,
@@ -134,29 +129,35 @@ export async function POST(request: NextRequest) {
         // }),
       )
       .withLlm(
-        new OpenAI({
-          model: 'gpt-4o-mini',
-          greetingMessage: GREETING,
-          failureMessage: 'Please wait a moment.',
-          maxHistory: 15,
-          params: {
-            max_tokens: 1024,
-            temperature: 0.7,
-            top_p: 0.95,
-          },
-        }),
-        // BYOK: uncomment the following block and set NEXT_LLM_API_KEY and NEXT_LLM_URL
-        // new OpenAI({
-        //   apiKey: requireEnv('NEXT_LLM_API_KEY'),
-        //   url: requireEnv('NEXT_LLM_URL'),
-        //   model: 'gpt-4o-mini',
-        //   greetingMessage: GREETING,
-        //   failureMessage: 'Please wait a moment.',
-        //   maxHistory: 15,
-        //   maxTokens: 1024,
-        //   temperature: 0.7,
-        //   topP: 0.95,
-        // }),
+        proxyUrl
+          ? // CONTROL PLANE: route every turn through our custom-LLM proxy.
+            // The proxy is OpenAI-compatible and injects persona + shared state
+            // per turn. apiKey is a shared secret Agora presents to the proxy;
+            // the proxy itself holds the real Gemini key server-side.
+            new OpenAI({
+              apiKey: process.env.NEXT_LLM_PROXY_KEY ?? 'roundtable-proxy',
+              url: proxyUrl,
+              model: 'roundtable-control-plane',
+              greetingMessage: GREETING,
+              failureMessage: 'Please wait a moment.',
+              maxHistory: 15,
+              maxTokens: 1024,
+              temperature: 0.7,
+              topP: 0.95,
+            })
+          : // Fallback: Agora-managed model (used only if NEXT_PUBLIC_APP_URL is unset,
+            // e.g. very first local smoke test before deploy).
+            new OpenAI({
+              model: 'gpt-4o-mini',
+              greetingMessage: GREETING,
+              failureMessage: 'Please wait a moment.',
+              maxHistory: 15,
+              params: {
+                max_tokens: 1024,
+                temperature: 0.7,
+                top_p: 0.95,
+              },
+            }),
       )
       .withTts(
         new MiniMaxTTS({

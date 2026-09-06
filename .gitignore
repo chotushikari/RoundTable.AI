@@ -137,6 +137,6 @@ dist
 .pnpm-store/
 
 .DS_Store
-docs/
-Sprints/
 .vercel
+.s6build/
+tsconfig.verify.json

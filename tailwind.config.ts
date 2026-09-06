@@ -13,8 +13,16 @@ const config: Config = {
   	extend: {
       fontFamily: {
         sans: ['var(--font-sans)', 'system-ui', 'sans-serif'],
+        display: ['var(--font-display)', 'Georgia', 'serif'],
       },
   		colors: {
+        role: {
+          technical: 'hsl(var(--role-technical) / <alpha-value>)',
+          product: 'hsl(var(--role-product) / <alpha-value>)',
+          customer: 'hsl(var(--role-customer) / <alpha-value>)',
+          manager: 'hsl(var(--role-manager) / <alpha-value>)',
+          behavioral: 'hsl(var(--role-behavioral) / <alpha-value>)',
+        },
         // The <alpha-value> placeholder enables Tailwind opacity modifiers like
         // bg-primary/90, bg-card/80, bg-destructive/10, etc.
         // Without it, hsl(var(--token)) can't accept an alpha channel at utility-class time.

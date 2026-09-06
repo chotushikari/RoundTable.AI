@@ -7,7 +7,7 @@
 *   [x] **Sprint 03:** Technical AI Policies
 *   [x] **Sprint 04:** Product & Hiring Manager Profiles
 *   [x] **Sprint 05:** Code Workspace
-*   [ ] **Sprint 06:** Control Room UX
+*   [x] **Sprint 06:** Control Room UX
 
 ## Sprint 00: Audit & Baseline
 - Initialized git repository.
@@ -42,3 +42,13 @@
 - Built the `CodeWorkspace` React component using `@monaco-editor/react` for a premium, syntax-highlighted IDE aesthetic.
 - Updated `ConversationComponent` to track `activeModality` (e.g., `'voice'` or `'code'`).
 - Redesigned `QuickstartConversationLayout` to dynamically shift into a split-screen layout when the agent transitions into code mode, keeping the voice connection alive while providing a coding environment.
+
+## Sprint 06 / R2: Control Room UX + Proxy Control Plane (2026-09-06)
+- **Custom-LLM proxy control plane (R2 keystone):** Agora's agent now points at `/api/chat/completions` as its LLM. Every turn, the proxy loads the shared CandidateState from Supabase, runs the orchestrator, and injects the active persona + state digest + objective + guardrails into the system prompt — one continuous session, zero reconnects on role change. Persists `NEXT_ACTION_SELECTED` with `reason_code` per turn.
+- **Specialist personas as config (5 roles):** Maya (Technical), Devin (Product), Priya (Customer roleplay), Sam (Hiring Manager), Jordan (Behavioural) — one shared brain, shifting lenses (`lib/interview/personas.ts`).
+- **Deterministic R2 orchestrator baseline:** least-confidence competency routing, technical→product hand-off, coding/debugging gaps open the code workspace (`lib/interview/orchestrator.ts`).
+- **Code-task library + workspace routing:** deterministic task selection (`lib/interview/problems.ts`); `/api/logger` pushes `codeTask` + `newModality` to the client (deduped via `CODE_TASK_OPENED`); proxy embeds the candidate's shared code into the next turn's prompt.
+- **Brand system + marketing landing:** Wordmark, RoleBadge, FiveFacesOrb, BeliefBar; candidate flow rerouted to `/interview` with an AI-disclosure gate.
+- **Recruiter Control Room:** `/recruiter` dashboard + `/recruiter/[id]` live view (competency belief bars, decision timeline, transcript) polled from Supabase; read-only recruiter APIs that degrade gracefully without DB.
+- **Verification:** `verify-sprint06.ts` (11/11), `verify-api-contracts.ts`, `tsc --noEmit`, `next build` — all green.
+- **Phase 1 expert audit completed** (see `docs/implementation/` reports); P0 gap identified: no state writer past v0 (R3 evidence extraction is next).

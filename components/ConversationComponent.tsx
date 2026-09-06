@@ -52,6 +52,15 @@ import type {
 import type { CandidateState } from '../lib/orchestrator';
 import type { ConversationComponentProps } from '@/types/conversation';
 
+// Workspace stub shape returned by /api/logger when the control plane opens code.
+type CodeTaskPayload = {
+  id: string;
+  title: string;
+  language: string;
+  starterCode: string;
+  kind: string;
+};
+
 // Cap the displayed issues list to avoid overwhelming the UI during a cascade of errors.
 const MAX_CONNECTION_ISSUES = 6;
 
@@ -105,6 +114,7 @@ export default function ConversationComponent({
 }: ConversationComponentProps) {
   const agentUID = String(DEFAULT_AGENT_UID);
   const restAgentId = (agoraData as any).agentId;
+  const interviewId = agoraData.interview_id;
 
   const candidateStateRef = useRef<CandidateState>({
     technical: 0.1,
@@ -118,6 +128,9 @@ export default function ConversationComponent({
 
   const recentTranscriptRef = useRef<string[]>([]);
 
+  // Code task pushed by the control plane when it opens the workspace.
+  const [codeTask, setCodeTask] = useState<CodeTaskPayload | null>(null);
+
   const logEvent = useCallback((type: string, payload: any) => {
     // If it's a transcript update, track it
     if (type === 'TRANSCRIPT_FINAL') {
@@ -127,15 +140,16 @@ export default function ConversationComponent({
 
     fetch('/api/logger', {
       method: 'POST',
-      body: JSON.stringify({ 
-        type, 
-        timestamp: Date.now(), 
-        agentUID, 
+      body: JSON.stringify({
+        type,
+        interview_id: interviewId,
+        timestamp: Date.now(),
+        agentUID,
         restAgentId,
         currentState: candidateStateRef.current,
         activeRole: activeRoleRef.current,
         recentTranscript: recentTranscriptRef.current,
-        ...payload 
+        ...payload
       }),
     })
     .then(res => res.json())
@@ -149,9 +163,13 @@ export default function ConversationComponent({
       if (data.newModality) {
         setActiveModality(data.newModality);
       }
+      // Control plane opened the workspace with a specific problem stub.
+      if (data.codeTask) {
+        setCodeTask(data.codeTask as CodeTaskPayload);
+      }
     })
     .catch(() => {});
-  }, [agentUID, restAgentId]);
+  }, [agentUID, restAgentId, interviewId]);
 
   const client = useRTCClient();
   const remoteUsers = useRemoteUsers();
@@ -550,9 +568,25 @@ export default function ConversationComponent({
     onEndConversation();
   }, [onEndConversation]);
 
+  // Candidate shares their code: log it so the agent/orchestrator can read it
+  // (Sprint 07 forwards this to the LLM over the data channel).
+  const handleSubmitCode = useCallback(
+    (code: string) => {
+      logEvent('CODE_CHANGED', {
+        task_id: codeTask?.id ?? null,
+        language: codeTask?.language ?? 'javascript',
+        code,
+        submitted: true,
+      });
+    },
+    [logEvent, codeTask],
+  );
+
   return (
     <QuickstartConversationLayout
       activeModality={activeModality}
+      codeTask={codeTask}
+      onSubmitCode={handleSubmitCode}
       statusPanel={
         <ConnectionStatusPanel
           connectionState={connectionState}

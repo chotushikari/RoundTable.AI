@@ -1,16 +1,31 @@
 import type { Metadata, Viewport } from 'next';
+import { Fraunces, Manrope } from 'next/font/google';
 import './globals.css';
+
+// Display: Fraunces — a variable serif with optical sizing and real character.
+// Body/UI: Manrope — a clean, premium geometric sans. Deliberately not Inter.
+const fraunces = Fraunces({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-display',
+  axes: ['opsz'],
+});
+
+const manrope = Manrope({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-sans',
+});
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
 };
 
 export const metadata: Metadata = {
-  title: 'Talk to your voice agent | Agora',
+  title: 'RoundTable — the interview panel that shares one brain',
   description:
-    "Next.js quickstart: real-time voice agent with live transcript, streaming audio, and low latency from Agora's Conversational AI Engine—API routes in one repo.",
+    'RoundTable runs a live, adaptive voice interview with five interviewer perspectives over one shared understanding of the candidate. It probes for evidence, tracks belief and confidence per skill, and hands you a defensible decision.',
   icons: {
     icon: [
       { url: '/favicon.ico' },
@@ -39,8 +54,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full">
-      <body className="h-full min-h-screen">{children}</body>
+    <html
+      lang="en"
+      className={`h-full ${manrope.variable} ${fraunces.variable}`}
+    >
+      <body className="h-full min-h-screen antialiased">{children}</body>
     </html>
   );
 }

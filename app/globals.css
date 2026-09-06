@@ -2,60 +2,76 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Light theme (default). Dark tokens apply when the OS prefers dark mode. */
+/*
+ * RoundTable design system.
+ * Cool premium paper + ink. The brand is intentionally MONOCHROME so the five
+ * interviewer role colors (blue/violet/amber/teal/rose) carry the identity.
+ * Dark tokens apply when the OS prefers dark mode (used by the interview room).
+ */
 :root {
   color-scheme: light;
 
-  /* --- Agora light token set --- */
-
-  /* Backgrounds */
-  --background:       220 20% 98%;
-  --surface:          220 18% 96%;
-  --surface-elevated: 220 16% 94%;
+  /* Backgrounds — cool paper, not warm cream */
+  --background:       240 20% 99%;
+  --surface:          240 16% 97%;
+  --surface-elevated: 0 0% 100%;
 
   /* Semantic surface aliases */
   --card:             0 0% 100%;
-  --card-foreground:  220 25% 12%;
+  --card-foreground:  230 25% 11%;
   --popover:          0 0% 100%;
-  --popover-foreground: 220 25% 12%;
-  --muted:            220 14% 94%;
+  --popover-foreground: 230 25% 11%;
+  --muted:            240 14% 96%;
 
-  /* Borders / inputs */
-  --border:           220 13% 88%;
-  --input:            220 13% 88%;
+  /* Borders / inputs — hairline, cool grey */
+  --border:           230 16% 90%;
+  --input:            230 16% 90%;
 
-  /* Foreground */
-  --foreground:       220 25% 12%;
-  --muted-foreground: 220 10% 42%;
+  /* Foreground — near-black ink with a cool cast */
+  --foreground:       230 25% 11%;
+  --muted-foreground: 230 8% 46%;
 
-  /* Brand — Agora cyan */
-  --primary:            194 100% 42%;
-  --primary-foreground: 220 25% 12%;
+  /* Brand — INK (monochrome). Buttons/links use ink, not a hue. */
+  --primary:            230 25% 11%;
+  --primary-foreground: 0 0% 100%;
 
   /* Secondary — quiet surface-level control */
-  --secondary:            220 14% 94%;
-  --secondary-foreground: 220 25% 12%;
+  --secondary:            240 14% 96%;
+  --secondary-foreground: 230 25% 11%;
 
-  /* Accent — same hue as primary */
-  --accent:            194 100% 42%;
-  --accent-foreground: 220 25% 12%;
+  /* Accent — subtle cool tint for hover/selected surfaces */
+  --accent:            240 14% 95%;
+  --accent-foreground: 230 25% 11%;
 
   /* Destructive — end call, error states only */
-  --destructive:            0 72% 52%;
+  --destructive:            2 74% 52%;
   --destructive-foreground: 0 0% 100%;
 
   /* Focus ring */
-  --ring: 194 100% 42%;
+  --ring: 230 25% 11%;
 
-  /* Radius base (8px) */
-  --radius: 0.5rem;
+  /* Radius base */
+  --radius: 0.75rem;
+
+  /* --- The five interviewer role colors — the signature system ---
+     H = hue for gradients/rings; used as hsl(var(--role-technical)). */
+  --role-technical:  217 91% 60%;   /* blue   */
+  --role-product:    258 90% 66%;   /* violet */
+  --role-customer:   38  92% 50%;   /* amber  */
+  --role-manager:    172 66% 45%;   /* teal   */
+  --role-behavioral: 349 89% 60%;   /* rose   */
+
+  /* Confidence bands for belief bars */
+  --conf-low:    38 92% 50%;
+  --conf-medium: 217 91% 60%;
+  --conf-high:   152 60% 42%;
 
   /* Charts */
-  --chart-1: 194 100% 42%;
-  --chart-2: 220 10% 45%;
-  --chart-3: 220 10% 35%;
-  --chart-4: 0 72% 52%;
-  --chart-5: 150 50% 40%;
+  --chart-1: 217 91% 60%;
+  --chart-2: 258 90% 66%;
+  --chart-3: 38 92% 50%;
+  --chart-4: 172 66% 45%;
+  --chart-5: 349 89% 60%;
 
   /* Sidebar */
   --sidebar-background:         0 0% 100%;
@@ -75,8 +91,10 @@
   --viz-stop-2: 220 14% 78%;
   --viz-stop-3: 285 58% 48%;
 
-  /* Font */
-  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  /* Fonts — next/font sets --font-sans / --font-display on <html>.
+     These are only fallbacks if the font loader is unavailable. */
+  --font-sans: 'Manrope', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -143,6 +161,21 @@ body {
   background-color: hsl(var(--background));
 }
 
+/* Display headings use Fraunces with tightened tracking + optical sizing. */
+.font-display {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  letter-spacing: -0.02em;
+}
+
+/* --- Signature orb rotation --- */
+@keyframes ff-orbit {
+  to { transform: rotate(360deg); }
+}
+@keyframes ff-orbit-reverse {
+  to { transform: rotate(-360deg); }
+}
+
 /* --- Entry animations --- */
 
 @keyframes fade-up {
@@ -163,6 +196,18 @@ body {
 .animate-fade-up-d1 { animation-delay: 60ms; }
 .animate-fade-up-d2 { animation-delay: 120ms; }
 .animate-fade-up-d3 { animation-delay: 180ms; }
+.animate-fade-up-d4 { animation-delay: 240ms; }
+.animate-fade-up-d5 { animation-delay: 300ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
 
 /* --- MicButtonWithVisualizer: force a true circle ---
    The parent flex can stretch the <button> unevenly. */
