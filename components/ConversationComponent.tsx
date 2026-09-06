@@ -44,6 +44,7 @@ import {
   type QuickstartAgentMetric,
 } from './QuickstartPipelineMetrics';
 import { QuickstartTranscriptPanel } from './QuickstartTranscriptPanel';
+import { PanelAvatar } from './PanelAvatar';
 import type { ConversationComponentProps } from '@/types/conversation';
 import { DEMO_CLOSING, normalizeSpokenText } from '@/lib/interview-demo';
 
@@ -97,6 +98,8 @@ export default function ConversationComponent({
   rtmClient,
   onTokenWillExpire,
   onEndConversation,
+  compactDemo = false,
+  companionDemo = false,
 }: ConversationComponentProps) {
   const agentUID = String(DEFAULT_AGENT_UID);
 
@@ -107,6 +110,7 @@ export default function ConversationComponent({
   const [isConnectionDetailsOpen, setIsConnectionDetailsOpen] = useState(false);
   const [activeModality, setActiveModality] = useState<'voice' | 'code' | 'canvas' | 'scenario'>('voice');
   const [activeRole, setActiveRole] = useState('technical');
+  const [workspacePrompt, setWorkspacePrompt] = useState<string | null>(null);
   const [activePhase, setActivePhase] = useState('introduction');
   const [timeRemainingSeconds, setTimeRemainingSeconds] = useState<number | null>(null);
   const autoEndTriggeredRef = useRef(false);
@@ -137,6 +141,7 @@ export default function ConversationComponent({
         if (typeof data?.session?.phase === 'string') setActivePhase(data.session.phase);
         if (data?.session) {
           setDemoProgress(data.session.demo ?? null);
+          setWorkspacePrompt(data.session.workspacePrompt ?? null);
           setPendingDemoQuestion(data.session.demo?.pendingQuestion ?? null);
           setServerDeadline(data.session.interviewEndsAt ?? null);
         }
@@ -608,8 +613,88 @@ export default function ConversationComponent({
     return () => window.clearTimeout(timer);
   }, [agentState, agentUID, demoProgress?.closing, handleEndConversation, transcript]);
 
+  useEffect(() => {
+    if (!compactDemo || autoEndTriggeredRef.current) return;
+    const endedAgentTurns = transcript.filter((turn) => String(turn.uid) === agentUID && turn.status === TurnStatus.END);
+    const endedCandidateTurns = transcript.filter((turn) => String(turn.uid) !== agentUID && turn.status === TurnStatus.END);
+    const complete = companionDemo
+      ? endedAgentTurns.length >= 1
+      : endedAgentTurns.length >= 2 && endedCandidateTurns.length >= 1;
+    if (!complete || !['listening', 'idle', 'silent'].includes(agentState ?? '')) return;
+    const timer = window.setTimeout(() => {
+      if (autoEndTriggeredRef.current) return;
+      autoEndTriggeredRef.current = true;
+      void handleEndConversation();
+    }, companionDemo ? 1_600 : 2_400);
+    return () => window.clearTimeout(timer);
+  }, [agentState, agentUID, compactDemo, companionDemo, handleEndConversation, transcript]);
+
+  if (compactDemo) {
+    if (companionDemo) {
+      const latestAgentMessage = [...messageList].reverse().find((message) => String(message.uid) === agentUID);
+      return (
+        <div className="flex min-h-[4.5rem] w-full items-center justify-center gap-3 bg-transparent text-center text-xs leading-5 text-[#898989]" aria-live="polite">
+          <span className={`h-2 w-2 shrink-0 rounded-full ${isAgentConnected ? 'bg-[#3ecf8e]' : 'bg-[#555]'}`} />
+          <p>{latestAgentMessage ? String(latestAgentMessage.text) : currentInProgressMessage ? String(currentInProgressMessage.text) : 'Connecting the Agora companion...'}</p>
+          <button type="button" onClick={handleEndConversation} className="shrink-0 rounded-md border border-[#353535] px-2 py-1 text-[10px] text-[#aaa] hover:bg-[#1d1d1d]">Stop</button>
+          {remoteUsers.map((user) => <div key={user.uid} className="hidden"><RemoteUser user={user} /></div>)}
+        </div>
+      );
+    }
+    const recentMessages = messageList.slice(-2);
+    return (
+      <div className="flex min-h-[26rem] w-full flex-col justify-between bg-[#171717] p-6 text-[#ededed]">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto py-2" aria-live="polite">
+          {recentMessages.length === 0 ? (
+            <p className="text-center text-sm text-[#777]">Connecting to the AI interviewer...</p>
+          ) : recentMessages.map((message) => {
+            const candidate = String(message.uid) !== agentUID;
+            return (
+              <div key={message.turn_id} className="text-sm leading-5">
+                <span className={candidate ? 'font-semibold text-[#888]' : 'font-semibold text-[#3ecf8e]'}>
+                  {candidate ? 'You' : 'RoundTable'}
+                </span>
+                <p className="mt-0.5">{String(message.text)}</p>
+              </div>
+            );
+          })}
+          {currentInProgressMessage && (
+            <p className="text-sm leading-5 text-[#888]">{String(currentInProgressMessage.text)}</p>
+          )}
+        </div>
+        <div className="mt-3 flex items-center justify-between border-t border-[#292929] pt-3">
+          <span className="flex items-center gap-2 text-[11px] font-medium text-[#888]">
+            <span className={`h-2 w-2 rounded-full ${isAgentConnected ? 'bg-[#3ecf8e]' : 'bg-[#555]'}`} />
+            {isAgentConnected ? 'AI listening' : 'Joining voice'}
+          </span>
+          <div className="flex items-center gap-2">
+            <div className="conversation-mic-host flex items-center justify-center scale-75">
+              <MicButtonWithVisualizer
+                isEnabled={isEnabled}
+                setIsEnabled={setIsEnabled}
+                track={localMicrophoneTrack}
+                onToggle={handleMicToggle}
+                className="overflow-visible"
+                aria-label={isEnabled ? 'Mute microphone' : 'Unmute microphone'}
+                enabledColor="#24b47e"
+                disabledColor="hsl(var(--destructive))"
+              />
+            </div>
+            <button type="button" onClick={handleEndConversation} className="rounded-md border border-[#353535] bg-[#1d1d1d] px-3 py-2 text-xs font-medium text-[#d7d7d7] hover:bg-[#242424]">
+              End sample
+            </button>
+          </div>
+        </div>
+        {remoteUsers.map((user) => (
+          <div key={user.uid} className="hidden"><RemoteUser user={user} /></div>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <QuickstartConversationLayout
+      workspacePrompt={workspacePrompt}
       activeModality={activeModality}
       activeRole={activeRole}
       activePhase={activePhase}
@@ -635,10 +720,11 @@ export default function ConversationComponent({
       }
       visualizer={
         <div
-          className="relative flex h-full min-h-[20rem] w-full max-w-4xl items-center justify-center"
+          className="relative flex h-full min-h-[20rem] w-full max-w-4xl flex-col items-center justify-center gap-4"
           role="region"
           aria-label="AI agent status visualization"
         >
+          <PanelAvatar role={activeRole} state={agentState} />
           <AgentVisualizer state={visualizerState} size="lg" />
           {remoteUsers.map((user) => (
             <div key={user.uid} className="hidden">

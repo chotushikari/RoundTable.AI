@@ -48,7 +48,10 @@ export function createAgoraToken(channel: string, uid: string): { token: string;
 }
 
 function baseUrl(): string {
-  const url = process.env.APP_BASE_URL ?? process.env.VERCEL_URL;
+  const vercelUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_URL;
+  const url = process.env.NODE_ENV === 'production' && vercelUrl
+    ? vercelUrl
+    : process.env.APP_BASE_URL ?? vercelUrl;
   if (!url) {
     if (process.env.NODE_ENV === 'production') throw new Error('APP_BASE_URL is required');
     return 'http://localhost:3000';
@@ -97,7 +100,7 @@ export async function startInterviewAgent({
   const greeting = demoMode
     ? `Hi! This is an AI interview for ${roleTitle} at ${companyName}, with ${formattedRoles}. One project, five perspectives. Take your time with each answer. A human reviews the summary. ${DEMO_OPENING_QUESTION}`
     : `Hi. This is a technical interview for the role of ${roleTitle} at ${companyName}. You are speaking with an AI interview panel: ${formattedRoles}. We will start with a brief introduction and background, then each interviewer will ask one focused question. This ${durationMinutes}-minute interview is reviewed by a human. ${paceGuidance} Please introduce yourself and share the experience most relevant to this role.`;
-  const instructions = `You are the voice executor for RoundTable's AI interview panel. The application-controlled custom LLM selects exactly one panel role and one question per turn. Speak its text faithfully, warmly, and concisely. Never claim to be human. Never make a hire or reject decision. Allow the candidate to interrupt naturally. When the candidate asks for a moment to think, acknowledge it calmly and do not advance the interview.`;
+  const instructions = `You are the voice executor for RoundTable's AI interview panel. The application-controlled custom LLM selects exactly one panel role and one question per turn. Speak its text faithfully, warmly, and concisely. Never claim to be human. Never make a hire or reject decision. Allow the candidate to interrupt naturally. When the candidate asks for a moment to think, acknowledge it calmly and do not advance the interview. Linear actions are controlled by the application: a comment is posted only after the application reads a preview and receives explicit candidate confirmation. Never invent a Linear result.`;
 
   const agent = new Agent({
     client,

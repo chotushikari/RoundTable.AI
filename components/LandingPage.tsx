@@ -3,6 +3,7 @@
 import { useState, useRef, Suspense, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
+import { ArrowUp, Mic } from 'lucide-react';
 import type { RTMClient } from 'agora-rtm';
 import type {
   AgoraTokenData,
@@ -13,6 +14,8 @@ import type {
 import { ErrorBoundary } from './ErrorBoundary';
 import { LoadingSkeleton } from './LoadingSkeleton';
 import { QuickstartPreCallCard } from './QuickstartPreCallCard';
+import { RoundTableLoadingScreen } from './RoundTableLoadingScreen';
+import { Button } from './ui/button';
 
 // Dynamically import the ConversationComponent with ssr disabled
 const ConversationComponent = dynamic(() => import('./ConversationComponent'), {
@@ -60,10 +63,22 @@ type InvitationPreview = {
   durationMinutes: number;
   panelRoles: string[];
   demoMode?: boolean;
+  candidateName?: string | null;
   existingSession?: { id: string; status: string } | null;
 };
 
-export default function LandingPage({ invitationToken }: { invitationToken?: string }) {
+export default function LandingPage({
+  invitationToken,
+  variant = 'full',
+  startSignal = 0,
+}: {
+  invitationToken?: string;
+  variant?: 'full' | 'compact-demo' | 'companion-demo';
+  startSignal?: number;
+}) {
+  const compactDemo = variant === 'compact-demo';
+  const companionDemo = variant === 'companion-demo';
+  const embeddedDemo = compactDemo || companionDemo;
   const [showConversation, setShowConversation] = useState(false);
 
   // Preload heavy modules on mount so they're already cached when the user
@@ -73,18 +88,20 @@ export default function LandingPage({ invitationToken }: { invitationToken?: str
     import('agora-rtm').catch(() => {});
   }, []);
   const [isLoading, setIsLoading] = useState(false);
+  const [isEnding, setIsEnding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [agoraData, setAgoraData] = useState<AgoraTokenData | null>(null);
   const [rtmClient, setRtmClient] = useState<RTMClient | null>(null);
   const [agentJoinError, setAgentJoinError] = useState(false);
   const [consent, setConsent] = useState(false);
+  const [candidateName, setCandidateName] = useState('');
   const [invitation, setInvitation] = useState<InvitationPreview | null>(null);
   const [completed, setCompleted] = useState(false);
-  const [resumeText, setResumeText] = useState('');
   const [releasedFeedback, setReleasedFeedback] = useState<{ strengths: string[]; growthAreas: string[] } | null>(null);
   const [isInvitationLoading, setIsInvitationLoading] = useState(Boolean(invitationToken));
   const startInFlightRef = useRef(false);
   const endInFlightRef = useRef(false);
+  const lastStartSignalRef = useRef(0);
 
   useEffect(() => {
     if (!invitationToken) return;
@@ -93,6 +110,7 @@ export default function LandingPage({ invitationToken }: { invitationToken?: str
         const data = await response.json();
         if (!response.ok) throw new Error(data.error ?? 'Invitation could not be loaded');
         setInvitation(data);
+        if (typeof data.candidateName === 'string') setCandidateName(data.candidateName);
         if (data.existingSession?.status === 'completed') {
           setCompleted(true);
           void fetch(`/api/sessions/${data.existingSession.id}`)
@@ -121,7 +139,7 @@ export default function LandingPage({ invitationToken }: { invitationToken?: str
           : `/api/invitations/${encodeURIComponent(invitationToken)}/session`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: resumeId ? undefined : JSON.stringify({ consent, resumeText: resumeText || undefined }),
+          body: resumeId ? undefined : JSON.stringify({ consent, candidateName: candidateName.trim() }),
         });
         const responseData = await sessionResponse.json();
         if (!sessionResponse.ok) throw new Error(responseData.error ?? 'Failed to start interview');
@@ -177,6 +195,7 @@ export default function LandingPage({ invitationToken }: { invitationToken?: str
           body: JSON.stringify({
             requester_id: responseData.uid,
             channel_name: responseData.channel,
+            experience: companionDemo ? 'companion' : 'interview',
           } as ClientStartRequest),
         })
           .then(async (res) => {
@@ -218,6 +237,14 @@ export default function LandingPage({ invitationToken }: { invitationToken?: str
       startInFlightRef.current = false;
     }
   };
+
+  useEffect(() => {
+    if (!companionDemo || showConversation || startSignal <= 0 || startSignal === lastStartSignalRef.current) return;
+    lastStartSignalRef.current = startSignal;
+    void handleStartConversation();
+    // The signal is the deliberate trigger. Session state guards duplicate starts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companionDemo, showConversation, startSignal]);
 
   const handleTokenWillExpire = useCallback(
     async (uid: string): Promise<AgoraRenewalTokens> => {
@@ -265,6 +292,7 @@ export default function LandingPage({ invitationToken }: { invitationToken?: str
   const handleEndConversation = async () => {
     if (endInFlightRef.current) return;
     endInFlightRef.current = true;
+    setIsEnding(true);
     if (agoraData?.sessionId) {
       try {
         await fetch(`/api/sessions/${agoraData.sessionId}/stop`, { method: 'POST' });
@@ -297,10 +325,12 @@ export default function LandingPage({ invitationToken }: { invitationToken?: str
     setRtmClient(null);
     setShowConversation(false);
     endInFlightRef.current = false;
+    setIsEnding(false);
   };
 
   return (
-    <div className="relative flex h-dvh min-h-screen flex-col overflow-hidden bg-background text-foreground">
+    <div className={compactDemo ? 'relative flex min-h-[26rem] flex-col bg-[#171717] text-[#ededed]' : companionDemo ? 'relative flex min-h-[4.5rem] flex-col bg-transparent text-[#ededed]' : 'relative flex h-dvh min-h-screen flex-col overflow-hidden bg-[#0d0d0d] text-[#ededed] before:pointer-events-none before:absolute before:inset-0 before:bg-[linear-gradient(rgba(255,255,255,.022)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.022)_1px,transparent_1px)] before:bg-[size:48px_48px]'}>
+      {!embeddedDemo && (isInvitationLoading || isLoading || isEnding) && <RoundTableLoadingScreen overlay label={isInvitationLoading ? 'Opening your interview' : isEnding ? 'Finalizing your interview' : 'Securing your voice room'} />}
       {/* Hero shell: either shows the pre-call CTA or swaps in the live conversation experience. */}
       <div
         className={`flex min-h-0 flex-1 flex-col ${
@@ -318,22 +348,55 @@ export default function LandingPage({ invitationToken }: { invitationToken?: str
         >
           {!showConversation ? (
             completed ? (
-              <div className="max-w-lg rounded-2xl border border-border bg-card p-8 text-center">
-                <h1 className="text-2xl font-semibold">Interview complete</h1>
-                <p className="mt-3 text-sm text-muted-foreground">Your evidence is ready for human review. Feedback appears only if the company releases it.</p>
+              <div className="max-w-lg rounded-3xl border border-[#2d2d2d] bg-[#141414] p-10 text-center shadow-[0_30px_100px_rgba(0,0,0,.4)]">
+                <span className="mx-auto grid h-12 w-12 place-items-center rounded-full border border-[#315241] bg-[#3ecf8e12] text-xl text-[#3ecf8e]">✓</span>
+                <h1 className="mt-6 text-3xl font-medium tracking-[-.04em]">Interview complete</h1>
+                <p className="mt-3 text-sm leading-6 text-[#858585]">Thank you for taking the time. Your evidence is ready for human review. Feedback appears only if the company releases it.</p>
                 {releasedFeedback && <div className="mt-6 text-left text-sm"><h2 className="font-semibold">Released summary</h2><p className="mt-2">Strengths: {releasedFeedback.strengths.join(' ') || 'No supported strength was released.'}</p><p className="mt-2">Growth areas: {releasedFeedback.growthAreas.join(' ') || 'No growth area was released.'}</p></div>}
               </div>
             ) : (
-              <QuickstartPreCallCard
-                isLoading={isLoading || isInvitationLoading}
-                error={error}
-                onStartConversation={handleStartConversation}
-                interview={invitation}
-                requiresConsent={Boolean(invitationToken)}
-                consent={consent}
-                onConsentChange={setConsent}
-                onResumeTextChange={setResumeText}
-              />
+              embeddedDemo ? (
+                companionDemo ? (
+                  <p className="py-3 text-center text-xs leading-5 text-[#898989]" aria-live="polite">
+                    {isLoading ? 'Connecting the Agora companion...' : error ?? 'Tap the companion to hear its Agora voice.'}
+                  </p>
+                ) : (
+                <div className="flex min-h-[26rem] w-full flex-col justify-between px-6 pb-6 pt-10 text-left">
+                  <div className="flex flex-1 flex-col items-center justify-center text-center">
+                    <div className="grid h-9 w-9 place-items-center rounded-full border border-[#353535] bg-[#1d1d1d] text-[#3ecf8e]">
+                      <Mic size={15} />
+                    </div>
+                    <p className="mt-4 max-w-sm text-[20px] font-normal leading-7 tracking-[-0.035em] text-[#ededed]">What did you build that made something better?</p>
+                    <p className="mt-2 text-xs text-[#777]">One answer. One grounded response.</p>
+                  </div>
+                  <div className="flex h-14 items-center rounded-xl border border-[#303030] bg-[#202020] px-3 shadow-[0_12px_34px_rgba(0,0,0,.22)]">
+                    <span className="flex-1 pl-1 text-xs text-[#777]">Talk to RoundTable</span>
+                    <Button
+                    size="icon"
+                    disabled={isLoading}
+                    onClick={handleStartConversation}
+                    className="h-8 w-8 rounded-full bg-[#3ecf8e] text-[#071810] hover:bg-[#55d99c] disabled:opacity-60"
+                    aria-label="Start one-question Agora voice sample"
+                  >
+                    {isLoading ? <span className="h-3 w-3 animate-pulse rounded-full bg-[#071810]" /> : <ArrowUp size={15} />}
+                  </Button>
+                  </div>
+                  {error && <p className="mt-2 text-center text-xs text-red-400">{error}</p>}
+                </div>
+                )
+              ) : (
+                <QuickstartPreCallCard
+                  isLoading={isLoading || isInvitationLoading}
+                  error={error}
+                  onStartConversation={handleStartConversation}
+                  interview={invitation}
+                  requiresConsent={Boolean(invitationToken)}
+                  consent={consent}
+                  onConsentChange={setConsent}
+                  candidateName={candidateName}
+                  onCandidateNameChange={setCandidateName}
+                />
+              )
             )
           ) : agoraData && rtmClient ? (
             <>
@@ -353,6 +416,8 @@ export default function LandingPage({ invitationToken }: { invitationToken?: str
                       rtmClient={rtmClient}
                       onTokenWillExpire={handleTokenWillExpire}
                       onEndConversation={handleEndConversation}
+                      compactDemo={embeddedDemo}
+                      companionDemo={companionDemo}
                     />
                   </AgoraProvider>
                 </ErrorBoundary>
@@ -368,7 +433,7 @@ export default function LandingPage({ invitationToken }: { invitationToken?: str
       </div>
 
       {/* Persistent attribution footer for the pre-call and in-call views. */}
-      <footer className="fixed bottom-0 right-0 z-40 py-4 pr-4 md:py-6 md:pr-6">
+      {!embeddedDemo && <footer className="fixed bottom-0 right-0 z-40 py-4 pr-4 md:py-6 md:pr-6">
         <div className="flex items-center justify-end gap-2 text-muted-foreground">
           <span className="text-xs font-medium tracking-wide uppercase">
             {invitationToken ? 'AI interview panel · Powered by' : 'Powered by'}
@@ -391,7 +456,7 @@ export default function LandingPage({ invitationToken }: { invitationToken?: str
             <span className="sr-only">Agora</span>
           </a>
         </div>
-      </footer>
+      </footer>}
     </div>
   );
 }

@@ -9,7 +9,8 @@ import {
 } from '@/lib/interview-controller';
 import { interviewStore } from '@/lib/interview-store';
 import { DEMO_CLOSING } from '@/lib/interview-demo';
-import { processDemoAnswer } from '@/lib/demo-turns';
+import { advanceDemoWorkspace, processDemoAnswer } from '@/lib/demo-turns';
+import { workspaceCommand, respondToWorkspaceCommand } from '@/lib/workspace-conversation';
 
 type ChatMessage = { role?: string; content?: unknown };
 type ChatBody = { messages?: ChatMessage[]; stream?: boolean; model?: string; [key: string]: unknown };
@@ -44,6 +45,12 @@ function sseResponse(text: string): NextResponse {
   return new NextResponse(stream, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive' } });
 }
 
+function isWorkspaceContinue(answer: string): boolean {
+  const normalized = answer.trim().toLocaleLowerCase().replace(/[.!?]+$/g, '');
+  if (normalized.split(/\s+/).filter(Boolean).length > 12) return false;
+  return /\b(?:continue|next question)(?:\s+(?:now|please|for(?:\s+the)?\s+next\s+panel(?:\s+perspective)?))?\b/.test(normalized);
+}
+
 export async function POST(request: Request) {
   const receivedAt = Date.now();
   try {
@@ -58,9 +65,26 @@ export async function POST(request: Request) {
     const messages = Array.isArray(body.messages) ? body.messages : [];
     const latestUser = [...messages].reverse().find((message) => message.role === 'user');
     const answer = messageText(latestUser?.content).trim();
-    if (!answer) throw new Error('A candidate answer is required');
+    // Agora may probe the custom LLM immediately after joining, before STT
+    // delivers a candidate turn. Returning a 4xx makes this look like an LLM
+    // authentication failure and can destabilize an otherwise healthy call.
+    if (!answer) return sseResponse('');
     // Caller-provided system messages and model names are intentionally ignored.
     const contextId = createHash('sha256').update(JSON.stringify(messages.slice(-6))).digest('hex');
+    const workspaceAction = workspaceCommand(answer);
+    if (workspaceAction) return sseResponse(await respondToWorkspaceCommand(session, workspaceAction, contextId, answer));
+    const version = await interviewStore.getInterviewVersion(session.interviewVersionId);
+    // In a demo, “continue” is an explicit skip for a workspace explanation.
+    // It must advance the pending panel role before generic repeat handling.
+    if (version?.definition.demoMode && isWorkspaceContinue(answer)) {
+      if (session.currentModality === 'code' || session.currentModality === 'canvas') {
+        return sseResponse(await advanceDemoWorkspace({ session, upstreamTurnId: contextId, outcome: 'skipped' }));
+      }
+      // Candidate-directed workspace completion is deliberate. It must not be
+      // blocked by a missing client receipt for the prior question, otherwise
+      // the panel gets stuck repeating the same technical task.
+      return sseResponse(await processDemoAnswer({ session, answer, upstreamTurnId: contextId, allowUndeliveredSkip: true }));
+    }
     const control = classifyCandidateConversationControl(answer);
     if (control) {
       const responseText = await processConversationControlTurn({
@@ -71,7 +95,13 @@ export async function POST(request: Request) {
       });
       return sseResponse(responseText);
     }
-    const version = await interviewStore.getInterviewVersion(session.interviewVersionId);
+    // A workspace task is a mini-interview owned by its current role. A spoken
+    // explanation must not silently consume that role and advance the demo.
+    // The candidate explicitly says "continue" when they want the next role.
+    if (version?.definition.demoMode && (session.currentModality === 'code' || session.currentModality === 'canvas')) {
+      const role = session.currentModality === 'code' ? 'Technical interviewer' : 'Product manager';
+      return sseResponse(`${role} here. I heard your explanation. Say check now for a grounded review, or say continue when you are ready for the next panel perspective.`);
+    }
     if (version?.definition.demoMode) {
       return sseResponse(await processDemoAnswer({ session, answer, upstreamTurnId: contextId }));
     }

@@ -4,7 +4,7 @@ import { requireCandidateSession } from '@/lib/api-auth';
 import { apiError } from '@/lib/http';
 import { interviewStore } from '@/lib/interview-store';
 
-const ArtifactSchema = z.object({ expectedVersion: z.number().int().min(0), content: z.unknown() });
+const ArtifactSchema = z.object({ expectedVersion: z.number().int().min(0), content: z.unknown(), checkpoint: z.boolean().default(false) });
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string; type: string }> }) {
   try {
@@ -24,9 +24,15 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     if (type !== 'code' && type !== 'canvas') throw new Error('Only code and canvas artifacts are supported');
     const body = ArtifactSchema.parse(await request.json());
     const serialized = JSON.stringify(body.content);
-    if (serialized.length > 100_000) throw new Error('Artifact exceeds the 100 KB limit');
+    if (serialized.length > 500_000) throw new Error('Artifact exceeds the 500 KB limit');
     const artifact = await interviewStore.saveArtifact(id, type, body.content, body.expectedVersion);
-    await interviewStore.appendEvent(id, 'workspace.checkpoint', { type, version: artifact.version, bytes: serialized.length });
+    const artifactVersion = body.checkpoint ? await interviewStore.getLatestArtifactVersion(id, type) : null;
+    await interviewStore.appendEvent(id, body.checkpoint ? 'workspace.checkpoint' : 'workspace.draft', {
+      type,
+      version: artifact.version,
+      bytes: serialized.length,
+      ...(artifactVersion ? { artifactVersionId: artifactVersion.id } : {}),
+    });
     return NextResponse.json({ artifact });
   } catch (error) {
     return apiError(error, 'Failed to save workspace checkpoint');

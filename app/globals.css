@@ -143,6 +143,113 @@ body {
   background-color: hsl(var(--background));
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
+.roundtable-loading {
+  position: relative;
+  z-index: 100;
+  display: flex;
+  min-height: 100vh;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.25rem;
+  overflow: hidden;
+  background:
+    linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px),
+    radial-gradient(circle at 50% 45%, rgba(62,207,142,.08), transparent 28%),
+    #0d0d0d;
+  background-size: 48px 48px, 48px 48px, auto, auto;
+  color: #ededed;
+  text-align: center;
+}
+
+.roundtable-loading--overlay {
+  position: fixed;
+  inset: 0;
+  min-height: 100dvh;
+  animation: roundtable-loading-in .25s ease-out both;
+}
+
+.roundtable-loading__brand {
+  position: absolute;
+  top: 2rem;
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  font-size: .85rem;
+  font-weight: 700;
+}
+
+.roundtable-loading__brand i {
+  width: .55rem;
+  height: .55rem;
+  border-radius: 50%;
+  background: #3ecf8e;
+  box-shadow: 0 0 0 5px rgba(62,207,142,.1);
+}
+
+.roundtable-loading__mark {
+  position: relative;
+  width: 4rem;
+  height: 4rem;
+}
+
+.roundtable-loading__mark span {
+  position: absolute;
+  inset: 0;
+  border: 1px solid #777777;
+  border-radius: 42% 58% 55% 45%;
+  animation: roundtable-orbit 1.5s linear infinite;
+}
+
+.roundtable-loading__mark span:nth-child(2) {
+  border-color: #3ecf8e;
+  animation-direction: reverse;
+  animation-duration: 1.15s;
+  transform: rotate(60deg) scale(.76);
+}
+
+.roundtable-loading__mark span:nth-child(3) {
+  animation-duration: 2s;
+  transform: rotate(120deg) scale(.5);
+}
+
+.roundtable-loading__copy { display: grid; gap: .4rem; }
+.roundtable-loading__copy strong { font-size: .95rem; font-weight: 550; letter-spacing: -.02em; }
+.roundtable-loading__copy span { color: #717171; font: .65rem var(--font-ibm-plex-mono), monospace; text-transform: uppercase; letter-spacing: .08em; }
+.roundtable-loading__bar { width: 11rem; height: 2px; overflow: hidden; border-radius: 99px; background: #282828; }
+.roundtable-loading__bar i { display: block; width: 45%; height: 100%; background: #3ecf8e; animation: roundtable-loading-bar 1.15s ease-in-out infinite; }
+
+@keyframes roundtable-orbit {
+  to { rotate: 360deg; }
+}
+@keyframes roundtable-loading-bar { 0% { transform: translateX(-110%); } 100% { transform: translateX(245%); } }
+@keyframes roundtable-loading-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* React Flow's default white nodes inherit the dark app foreground in dark
+   mode. The canvas uses an explicit high-contrast palette in both themes. */
+.interview-canvas .react-flow__node {
+  color: #0f172a;
+  background: #ffffff;
+  border: 2px solid #64748b;
+  border-radius: 10px;
+  font-weight: 700;
+}
+.interview-canvas .react-flow__handle {
+  width: 10px;
+  height: 10px;
+  background: #0284c7;
+  border: 2px solid #ffffff;
+}
+.interview-canvas .react-flow__edge-path {
+  stroke: #0284c7;
+  stroke-width: 2;
+}
+
 /* --- Entry animations --- */
 
 @keyframes fade-up {
@@ -169,6 +276,24 @@ body {
 .conversation-mic-host {
   flex-shrink: 0;
 }
+
+/* Recruiter-owned resume attachment shown before an invitation is published. */
+[class*="CompanyDashboard_interviewItem"] > label:has(input[type="file"]) {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  margin: 0 0 .75rem;
+  padding: .7rem .75rem;
+  border: 1px dashed #353535;
+  border-radius: .5rem;
+  color: #3ecf8e;
+  background: #151515;
+  cursor: pointer;
+}
+[class*="CompanyDashboard_interviewItem"] > label:has(input[type="file"]) > span { display: grid; min-width: 0; flex: 1; gap: .1rem; }
+[class*="CompanyDashboard_interviewItem"] > label:has(input[type="file"]) strong { overflow: hidden; color: #bdbdbd; font-size: .7rem; text-overflow: ellipsis; white-space: nowrap; }
+[class*="CompanyDashboard_interviewItem"] > label:has(input[type="file"]) small { color: #666; font-size: .58rem; }
+[class*="CompanyDashboard_interviewItem"] > label:has(input[type="file"]) input { max-width: 7rem; color: #777; font-size: .58rem; }
 .conversation-mic-host > button {
   aspect-ratio: 1 / 1;
   width: 3rem;
@@ -181,6 +306,21 @@ body {
   padding: 0;
   box-sizing: border-box;
   overflow: visible; /* Web Audio bar visualizer in bottom band; avoid clipping */
+}
+
+@keyframes panel-avatar-speaking {
+  0%, 100% { transform: scale(1); box-shadow: 0 10px 18px rgba(8, 145, 178, 0.22); }
+  50% { transform: scale(1.055); box-shadow: 0 18px 30px rgba(8, 145, 178, 0.38); }
+}
+
+.panel-avatar-speaking {
+  animation: panel-avatar-speaking 900ms ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel-avatar-speaking { animation: none; }
+  html { scroll-behavior: auto; }
+  .roundtable-loading__mark span, .roundtable-loading__bar i { animation: none; }
 }
 @media (min-width: 640px) {
   .conversation-mic-host > button {

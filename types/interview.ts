@@ -64,6 +64,10 @@ export const InterviewCreateSchema = z.object({
     .default([]),
   durationMinutes: z.number().int().min(2).max(90).default(30),
   demoMode: z.boolean().optional(),
+  linearIssueIdentifier: z.preprocess(
+    (value) => typeof value === 'string' && !value.trim() ? undefined : value,
+    z.string().trim().regex(/^[A-Za-z][A-Za-z0-9_-]*-\d+$/, 'Use a Linear issue identifier such as ENG-123').max(80).optional(),
+  ),
   instructions: z.string().trim().max(4_000).default(''),
 }).superRefine((value, context) => {
   if (value.demoMode && new Set(value.panelRoles).size !== PANEL_ROLES.length) {
@@ -116,8 +120,8 @@ export type EvidenceRef = z.infer<typeof EvidenceRefSchema>;
 export const RoleFindingSchema = z.object({
   role: PanelRoleSchema,
   observations: z.array(z.string().trim().min(1).max(500)).max(6),
-  strengths: z.array(z.string().trim().min(1).max(300)).max(4),
-  gaps: z.array(z.string().trim().min(1).max(300)).max(4),
+  strengths: z.array(z.string().trim().min(1).max(300)).max(4).default([]),
+  gaps: z.array(z.string().trim().min(1).max(300)).max(4).default([]),
 });
 
 export const CompetencyEvidenceSchema = z.object({
@@ -135,7 +139,9 @@ export const ContradictionSchema = z.object({
 });
 
 export const PanelTurnAnalysisSchema = z.object({
-  roleFindings: z.array(RoleFindingSchema).min(2).max(5),
+  // Models sometimes return a partial list. `validateEvidence` fills every
+  // configured role with an explicit evidence gap before persistence.
+  roleFindings: z.array(RoleFindingSchema).min(1).max(5),
   competencyEvidence: z.array(CompetencyEvidenceSchema).max(10),
   vague: z.boolean(),
   vagueReason: z.string().trim().max(500).default(''),
@@ -332,10 +338,21 @@ export interface WorkspaceArtifactRecord {
   updatedAt: string;
 }
 
+export interface ArtifactVersionRecord {
+  id: string;
+  artifactId: string;
+  sessionId: string;
+  type: 'code' | 'canvas';
+  version: number;
+  content: unknown;
+  createdAt: string;
+}
+
 export interface ToolRunRecord {
   id: string;
   sessionId: string;
-  name: 'get_workspace_snapshot' | 'run_code_tests' | 'inject_scenario_constraint';
+  name: 'get_workspace_snapshot' | 'run_code_tests' | 'inject_scenario_constraint'
+    | 'linear_get_issue' | 'linear_prepare_comment' | 'linear_post_comment';
   input: Record<string, unknown>;
   output: unknown;
   status: 'completed' | 'failed';
@@ -357,4 +374,51 @@ export interface AssessmentRecord {
   releasedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * Stable, company-facing projection of a completed interview. This is
+ * deliberately separate from controller state, events, and raw artifacts so
+ * the dashboard does not depend on internal persistence details.
+ */
+export interface CompanyInterviewReport {
+  session: {
+    id: string;
+    status: InterviewStatus;
+    startedAt: string;
+    completedAt: string | null;
+    durationSeconds: number | null;
+    connectionHealth: InterviewSessionRecord['connectionHealth'];
+  };
+  candidate: { name: string | null; email: string | null };
+  interview: {
+    title: string;
+    roleTitle: string;
+    panelRoles: PanelRole[];
+    rubricVersion: number;
+  };
+  summary: Pick<FinalAssessment, 'overallSummary' | 'strengths' | 'growthAreas' | 'suggestedHumanFollowUps' | 'humanReviewRequired'>;
+  competencies: FinalAssessment['competencies'];
+  roleViews: FinalAssessment['roleViews'];
+  coverage: FinalAssessment['coverage'] & {
+    mustAsk: Array<{ question: string; status: 'asked' | 'not_reached' }>;
+    topicsExplored: string[];
+    rolesWithEvidence: PanelRole[];
+  };
+  unresolvedContradictions: FinalAssessment['unresolvedContradictions'];
+  transcript: Array<Pick<TranscriptTurnRecord, 'id' | 'sequence' | 'speaker' | 'speakerRole' | 'text' | 'status' | 'createdAt'> & { evidenceReferences: string[] }>;
+  workspace: {
+    code: { available: boolean; version: number | null; language: string | null; nonEmptyLines: number; functions: string[] };
+    canvas: { available: boolean; version: number | null; elementCount: number; labels: string[]; arrowCount: number };
+  };
+  integrations: {
+    linear: {
+      configuredIssue: string | null;
+      issueLoaded: boolean;
+      commentPrepared: boolean;
+      commentPosted: boolean;
+      commentUrl: string | null;
+    };
+  };
+  assessment: { generatedAt: string; model: string; candidateFeedbackReleasedAt: string | null };
 }

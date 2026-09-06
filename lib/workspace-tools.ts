@@ -4,7 +4,7 @@ import { Sandbox } from 'e2b';
 import { interviewStore } from '@/lib/interview-store';
 import type { ToolRunRecord } from '@/types/interview';
 
-export type WorkspaceToolName = ToolRunRecord['name'];
+export type WorkspaceToolName = 'get_workspace_snapshot' | 'run_code_tests' | 'inject_scenario_constraint';
 
 const MAX_TOOL_RUNS = 5;
 const MAX_OUTPUT_CHARS = 8_000;
@@ -60,32 +60,81 @@ async function workspaceSnapshot(sessionId: string) {
   };
 }
 
+type CodeLanguage = 'python' | 'javascript' | 'typescript';
+
+type TestPlan = { id: string; summary: string; javascript: string; python: string };
+
+function testPlan(question: string): TestPlan {
+  const normalized = question.toLowerCase();
+  if (/reverse\s*string|reverses? a string|reversestring/.test(normalized)) {
+    return {
+      id: 'reverse-string-v1',
+      summary: 'reverseString handles a normal string and an empty string',
+      javascript: "assert.equal(reverseString('hello'), 'olleh');\nassert.equal(reverseString(''), '');",
+      python: "assert reverseString('hello') == 'olleh'\nassert reverseString('') == ''",
+    };
+  }
+  if (/count\s*vowels|countvowels|number of vowels/.test(normalized)) {
+    return {
+      id: 'count-vowels-v1',
+      summary: 'countVowels handles regular text, an empty string, and non-alphabetic characters',
+      javascript: "assert.equal(countVowels('RoundTable'), 4);\nassert.equal(countVowels(''), 0);\nassert.equal(countVowels('a1!E'), 2);",
+      python: "assert countVowels('RoundTable') == 4\nassert countVowels('') == 0\nassert countVowels('a1!E') == 2",
+    };
+  }
+  if (/even numbers|count.*even/.test(normalized)) {
+    return {
+      id: 'count-even-v1',
+      summary: 'solution counts even numbers and handles an empty list',
+      javascript: 'assert.equal(solution([1, 2, 3, 4]), 2);\nassert.equal(solution([]), 0);',
+      python: 'assert solution([1, 2, 3, 4]) == 2\nassert solution([]) == 0',
+    };
+  }
+  return {
+    id: 'syntax-runtime-v1',
+    summary: 'code parses and runs; this question has no server-selected functional cases yet',
+    javascript: '',
+    python: '',
+  };
+}
+
 async function runTests(sessionId: string) {
   if (!process.env.E2B_API_KEY) throw new Error('E2B_API_KEY is not configured');
-  const codeArtifact = await interviewStore.getArtifact(sessionId, 'code');
-  const content = codeArtifact?.content as { checkpoint?: { source?: unknown; language?: unknown } } | undefined;
-  const checkpoint = content?.checkpoint;
-  if (typeof checkpoint?.source !== 'string') throw new Error('No deliberate code checkpoint is available');
-  if (!['javascript', 'typescript'].includes(String(checkpoint.language ?? 'typescript'))) {
-    throw new Error('Only JavaScript and TypeScript checkpoints can be tested');
+  const [session, codeArtifact] = await Promise.all([
+    interviewStore.getSession(sessionId),
+    interviewStore.getArtifact(sessionId, 'code'),
+  ]);
+  const content = codeArtifact?.content as { source?: unknown; language?: unknown; checkpoint?: { source?: unknown; language?: unknown } } | undefined;
+  const candidate = typeof content?.source === 'string' ? content : content?.checkpoint;
+  if (typeof candidate?.source !== 'string') throw new Error('No autosaved code is available yet');
+  if (!['python', 'javascript', 'typescript'].includes(String(candidate.language ?? 'typescript'))) {
+    throw new Error('Only Python, JavaScript and TypeScript checkpoints can be tested');
   }
-  if (checkpoint.source.length > 50_000) throw new Error('Code checkpoint exceeds the 50 KB limit');
+  if (candidate.source.length > 50_000) throw new Error('Code exceeds the 50 KB limit');
 
-  const javascript = checkpoint.language === 'javascript'
-    ? checkpoint.source
-    : ts.transpileModule(checkpoint.source, {
+  const language = candidate.language as CodeLanguage;
+  const python = language === 'python';
+  const plan = testPlan(session?.pendingQuestion ?? '');
+  const javascript = python ? '' : language === 'javascript'
+    ? candidate.source
+    : ts.transpileModule(candidate.source, {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
       }).outputText;
-  const harness = `'use strict';\nconst assert = require('node:assert/strict');\n${javascript}\nif (typeof solution !== 'function') throw new Error('Define a function named solution');\nassert.equal(typeof solution, 'function');\nconsole.log('Harness loaded solution successfully');`;
+  const harness = `'use strict';\nconst assert = require('node:assert/strict');\n${javascript}\n${plan.javascript}\nconsole.log('PASS: ${plan.id}');`;
   const sandbox = await Sandbox.create({ timeoutMs: 20_000 });
   try {
-    await sandbox.files.write('/tmp/roundtable-test.cjs', harness);
-    const result = await sandbox.commands.run('node /tmp/roundtable-test.cjs', { timeoutMs: 15_000 });
+    const path = python ? '/tmp/roundtable-test.py' : '/tmp/roundtable-test.cjs';
+    const pythonHarness = `${candidate.source}\n\n${plan.python}\nprint('PASS: ${plan.id}')\n`;
+    await sandbox.files.write(path, python ? pythonHarness : harness);
+    const result = await sandbox.commands.run(python ? 'python3 /tmp/roundtable-test.py' : 'node /tmp/roundtable-test.cjs', { timeoutMs: 15_000 });
     return {
+      passed: result.exitCode === 0,
+      testId: plan.id,
+      summary: plan.summary,
       exitCode: result.exitCode,
       stdout: capped(result.stdout),
       stderr: capped(result.stderr),
-      harness: 'roundtable-js-function-v1',
+      harness: python ? 'roundtable-python-v2' : 'roundtable-javascript-v2',
     };
   } finally {
     await sandbox.kill();
@@ -128,7 +177,7 @@ export const workspaceToolDefinitions = [
   },
   {
     name: 'run_code_tests',
-    description: 'Run the server-selected JavaScript/TypeScript harness against the latest code checkpoint.',
+    description: 'Run server-selected functional tests for the current coding question against the latest autosaved Python, JavaScript, or TypeScript code. Unknown tasks receive a syntax/runtime check.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   },
   {

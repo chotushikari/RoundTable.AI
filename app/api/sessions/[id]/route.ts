@@ -49,6 +49,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         activeRole: session.activeRole,
         currentModality: session.currentModality,
         phase: session.phase,
+        workspacePrompt: ['code', 'canvas'].includes(session.currentModality) ? session.pendingQuestion : null,
         demo,
         interviewEndsAt: version && session.status === 'in_progress'
           ? new Date(Date.parse(session.startedAt) + version.definition.durationMinutes * 60_000).toISOString()

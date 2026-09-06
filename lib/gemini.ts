@@ -51,6 +51,10 @@ export function isGroqRateLimitError(error: unknown): error is GroqApiError {
 }
 
 export function logGroqFallback(scope: string, fallback: string, error: unknown): void {
+  if (error instanceof z.ZodError) {
+    console.warn(`[${scope}] Groq returned an incomplete structured response; ${fallback}.`);
+    return;
+  }
   if (error instanceof GroqApiError && error.status === 413) {
     console.warn(`[${scope}] Groq request size limit for ${error.model}; ${fallback}.`);
     return;

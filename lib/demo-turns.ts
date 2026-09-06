@@ -1,8 +1,17 @@
 import { createHash } from 'crypto';
 import { interviewStore } from '@/lib/interview-store';
-import { processCandidateTurn, turnDedupeKey } from '@/lib/interview-controller';
-import { DEMO_OPENING_QUESTION, normalizeSpokenText } from '@/lib/interview-demo';
-import type { InterviewSessionRecord } from '@/types/interview';
+import { demoQuestionForRole, processCandidateTurn, turnDedupeKey } from '@/lib/interview-controller';
+import { DEMO_CLOSING, DEMO_OPENING_QUESTION, demoRoles, normalizeSpokenText } from '@/lib/interview-demo';
+import { demoWorkspaceQuestion } from '@/lib/workspace-policy';
+import type { InterviewSessionRecord, PanelRole } from '@/types/interview';
+
+const ROLE_LABEL: Record<PanelRole, string> = {
+  hiring_manager: 'Hiring manager',
+  technical: 'Technical interviewer',
+  product: 'Product manager',
+  customer: 'Customer',
+  behavioral: 'Behavioural interviewer',
+};
 
 // A question is an epoch, not an ASR segment. Transport receipts never supply
 // role, score or coverage; those remain derived from server-owned questions.
@@ -21,17 +30,17 @@ export function mergeAnswerFragments(fragments: string[]): string {
 }
 
 export function isIncompleteDemoAnswer(answer: string, role: string): boolean {
-  if (/^(?:please )?(?:skip(?: this(?: question)?)?|pass|i (?:don't|do not) know)[.! ]*$/i.test(answer)
+  if (/^(?:please )?(?:skip(?: this(?: question)?)?|pass|continue(?: (?:now|please|for(?: the)? next panel(?: perspective)?))?|next(?: question)?|i (?:don't|do not) know)[.! ]*$/i.test(answer)
     || /\b(that['’]s (?:all|my answer)|i['’]m done)\W*$/i.test(answer)) return false;
   const words = answer.trim().split(/\s+/);
   if (words.length < 8 || /\b(that|was|is|the|a|an|to|and|but|because|with|my|took|were)\W*$/i.test(answer)) return true;
   // An introduction alone is not the requested project example.
   return role === 'hiring_manager'
-    && !/\b(project|built|implemented|developed|owned|led|created|delivered|worked on|checkout|service|system|application|platform)\b/i.test(answer);
+    && !/\b(project|assignment|exercise|coursework|homework|built|implemented|developed|owned|led|created|delivered|worked on|checkout|service|system|application|platform)\b/i.test(answer);
 }
 
 export async function processDemoAnswer(input: {
-  session: InterviewSessionRecord; answer: string; upstreamTurnId: string;
+  session: InterviewSessionRecord; answer: string; upstreamTurnId: string; allowUndeliveredSkip?: boolean;
 }): Promise<string> {
   // Retry lookup precedes refreshing the question epoch: a retried response must
   // not become an answer to the next panel member.
@@ -58,7 +67,7 @@ export async function processDemoAnswer(input: {
     });
     return text;
   };
-  if (!delivered) {
+  if (!delivered && !input.allowUndeliveredSkip) {
     // Speech that interrupts an unheard question cannot complete that role.
     // Rephrase/resume that question instead of silently skipping it.
     return saveResponse(`Let me repeat the question. ${question.text}`);
@@ -89,4 +98,85 @@ export async function processDemoAnswer(input: {
     reservationKey: turnDedupeKey(session.id, question.id, 'demo-answer'),
   });
   return saveResponse(result.responseText);
+}
+
+/**
+ * Move on from a code/canvas task without creating a fake candidate answer.
+ * "Check now" and "continue" are workspace controls, never assessment evidence.
+ */
+export async function advanceDemoWorkspace(input: {
+  session: InterviewSessionRecord;
+  upstreamTurnId: string;
+  outcome: 'completed' | 'skipped';
+}): Promise<string> {
+  const initialEvents = await interviewStore.listEvents(input.session.id);
+  const cached = initialEvents.find((event) => event.type === 'demo.workspace_response'
+    && event.payload.requestId === input.upstreamTurnId);
+  if (cached) return String(cached.payload.text ?? '');
+
+  const session = await interviewStore.getSession(input.session.id);
+  if (!session || !['ready', 'in_progress'].includes(session.status)) throw new Error('Session is not active');
+  if (session.currentModality !== 'code' && session.currentModality !== 'canvas') {
+    return 'There is no active workspace task to complete. Please answer the current question, or ask me to repeat it.';
+  }
+  const version = await interviewStore.getInterviewVersion(session.interviewVersionId);
+  if (!version?.definition.demoMode) return 'The workspace review is recorded. Please continue with your explanation when you are ready.';
+  const interview = await interviewStore.getInterview(session.interviewId, session.organizationId);
+  if (!interview) throw new Error('Interview definition is unavailable');
+
+  const completedArtifact = input.outcome === 'completed'
+    ? await interviewStore.getLatestArtifactVersion(session.id, session.currentModality)
+    : null;
+  await interviewStore.appendEvent(session.id, input.outcome === 'completed' ? 'demo.workspace_completed' : 'demo.workspace_skipped', {
+    requestId: input.upstreamTurnId,
+    role: session.activeRole,
+    modality: session.currentModality,
+    ...(completedArtifact ? { artifactVersionId: completedArtifact.id } : {}),
+  });
+  const events = await interviewStore.listEvents(session.id);
+  const completed = new Set(events
+    .filter((event) => event.type === 'demo.workspace_completed' || event.type === 'demo.workspace_skipped')
+    .map((event) => event.payload.role)
+    .filter((role): role is PanelRole => typeof role === 'string' && interview.panelRoles.includes(role as PanelRole)));
+  const next = demoRoles(interview.panelRoles).find((role) => !completed.has(role) && role !== 'hiring_manager');
+
+  const extendedDemo = interview.durationMinutes >= 10;
+  const workspace = next === 'technical'
+    ? demoWorkspaceQuestion(interview, version.plan, extendedDemo ? 'code' : undefined)
+    : next === 'product' && extendedDemo
+      ? demoWorkspaceQuestion(interview, version.plan, 'canvas')
+      : null;
+  const modality = workspace?.modality ?? (next === 'customer' ? 'scenario' : 'voice');
+  const text = next
+    ? `${ROLE_LABEL[next]} here. ${workspace?.objective ?? demoQuestionForRole(next)}`
+    : DEMO_CLOSING;
+
+  const updated = await interviewStore.updateSession(session.id, {
+    previousRole: session.activeRole,
+    activeRole: next ?? session.activeRole,
+    consecutiveRoleTurns: next === session.activeRole ? session.consecutiveRoleTurns + 1 : 1,
+    currentModality: modality,
+    phase: next ? 'panel' : 'wrap_up',
+    pendingQuestion: text,
+    stateVersion: session.stateVersion + 1,
+  }, session.stateVersion);
+  await interviewStore.createTurn({
+    sessionId: session.id,
+    speaker: 'interviewer',
+    speakerRole: next ?? session.activeRole,
+    text,
+    status: 'final',
+    dedupeKey: turnDedupeKey(session.id, text, `workspace-handoff:${input.upstreamTurnId}`),
+  });
+  await interviewStore.appendEvent(session.id, 'demo.workspace_handoff', {
+    requestId: input.upstreamTurnId,
+    fromRole: session.activeRole,
+    toRole: updated.activeRole,
+    text,
+  });
+  await interviewStore.appendEvent(session.id, 'demo.workspace_response', {
+    requestId: input.upstreamTurnId,
+    text,
+  });
+  return text;
 }

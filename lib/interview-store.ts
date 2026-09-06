@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import type {
+  ArtifactVersionRecord,
   AssessmentRecord,
   FinalAssessment,
   InterviewCreateInput,
@@ -24,6 +25,7 @@ type MemoryDatabase = {
   turns: Map<string, TranscriptTurnRecord>;
   analyses: Map<string, TurnAnalysisRecord>;
   artifacts: Map<string, WorkspaceArtifactRecord>;
+  artifactVersions: Map<string, ArtifactVersionRecord>;
   toolRuns: Map<string, ToolRunRecord>;
   events: Map<string, SessionEventRecord>;
   assessments: Map<string, AssessmentRecord>;
@@ -43,6 +45,7 @@ function memory(): MemoryDatabase {
       turns: new Map(),
       analyses: new Map(),
       artifacts: new Map(),
+      artifactVersions: new Map(),
       toolRuns: new Map(),
       events: new Map(),
       assessments: new Map(),
@@ -72,6 +75,7 @@ function interviewFromRow(row: Record<string, unknown>): InterviewDefinitionReco
     mustCoverTopics: (row.must_cover_topics ?? []) as string[],
     durationMinutes: Number(row.duration_minutes),
     demoMode: row.demo_mode === true,
+    linearIssueIdentifier: row.linear_issue_identifier ? String(row.linear_issue_identifier) : undefined,
     instructions: String(row.instructions ?? ''),
     status: row.status as InterviewDefinitionRecord['status'],
     plan: (row.plan as InterviewPlan | null) ?? null,
@@ -192,6 +196,7 @@ export const interviewStore = {
         must_cover_topics: input.mustCoverTopics,
         duration_minutes: input.durationMinutes,
         demo_mode: input.demoMode ?? false,
+        linear_issue_identifier: input.linearIssueIdentifier ?? null,
         instructions: input.instructions,
       })
       .select('*')
@@ -302,6 +307,7 @@ export const interviewStore = {
         mustCoverTopics: interview.mustCoverTopics,
         durationMinutes: interview.durationMinutes,
         demoMode: interview.demoMode ?? false,
+        linearIssueIdentifier: interview.linearIssueIdentifier,
         instructions: interview.instructions,
       },
       plan: interview.plan,
@@ -452,6 +458,28 @@ export const interviewStore = {
       .select('*')
       .single();
     throwDatabase(error, 'set invitation resume path');
+    return invitationFromRow(data as Record<string, unknown>);
+  },
+
+  async setInvitationCandidateName(id: string, candidateName: string): Promise<InvitationRecord> {
+    const existing = await this.getInvitation(id);
+    if (!existing) throw new Error('Invitation not found');
+    if (existing.claimedAt) throw new Error('Invitation has already been used');
+    const next = { ...existing, candidateName };
+    const admin = getSupabaseAdmin();
+    if (!admin) {
+      memory().invitations.set(id, next);
+      return next;
+    }
+    const { data, error } = await admin
+      .from('invitations')
+      .update({ candidate_name: candidateName })
+      .eq('id', id)
+      .is('claimed_at', null)
+      .select('*')
+      .maybeSingle();
+    throwDatabase(error, 'set invitation candidate name');
+    if (!data) throw new Error('Invitation has already been used');
     return invitationFromRow(data as Record<string, unknown>);
   },
 
@@ -835,6 +863,16 @@ export const interviewStore = {
     const admin = getSupabaseAdmin();
     if (!admin) {
       memory().artifacts.set(`${sessionId}:${type}`, record);
+      const versionRecord: ArtifactVersionRecord = {
+        id: randomUUID(),
+        artifactId: record.id,
+        sessionId,
+        type,
+        version: record.version,
+        content,
+        createdAt: timestamp,
+      };
+      memory().artifactVersions.set(`${record.id}:${record.version}`, versionRecord);
       return record;
     }
     const payload = {
@@ -868,6 +906,46 @@ export const interviewStore = {
       .maybeSingle();
     throwDatabase(error, 'get workspace artifact');
     return data ? artifactFromRow(data) : null;
+  },
+
+  async getLatestArtifactVersion(
+    sessionId: string,
+    type: 'code' | 'canvas',
+  ): Promise<ArtifactVersionRecord | null> {
+    const admin = getSupabaseAdmin();
+    if (!admin) {
+      return [...memory().artifactVersions.values()]
+        .filter((item) => item.sessionId === sessionId && item.type === type)
+        .sort((a, b) => b.version - a.version)[0] ?? null;
+    }
+    const { data, error } = await admin
+      .from('artifact_versions')
+      .select('*')
+      .eq('session_id', sessionId)
+      .eq('type', type)
+      .order('version', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    throwDatabase(error, 'get latest artifact version');
+    return data ? artifactVersionFromRow(data) : null;
+  },
+
+  async getArtifactVersion(
+    sessionId: string,
+    id: string,
+  ): Promise<ArtifactVersionRecord | null> {
+    const admin = getSupabaseAdmin();
+    if (!admin) {
+      return [...memory().artifactVersions.values()].find((item) => item.sessionId === sessionId && item.id === id) ?? null;
+    }
+    const { data, error } = await admin
+      .from('artifact_versions')
+      .select('*')
+      .eq('session_id', sessionId)
+      .eq('id', id)
+      .maybeSingle();
+    throwDatabase(error, 'get artifact version');
+    return data ? artifactVersionFromRow(data) : null;
   },
 
   async createToolRun(record: ToolRunRecord): Promise<ToolRunRecord> {
@@ -1062,6 +1140,18 @@ function artifactFromRow(row: Record<string, unknown>): WorkspaceArtifactRecord 
     content: row.content,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
+  };
+}
+
+function artifactVersionFromRow(row: Record<string, unknown>): ArtifactVersionRecord {
+  return {
+    id: String(row.id),
+    artifactId: String(row.artifact_id),
+    sessionId: String(row.session_id),
+    type: row.type as ArtifactVersionRecord['type'],
+    version: Number(row.version),
+    content: row.content,
+    createdAt: String(row.created_at),
   };
 }
 

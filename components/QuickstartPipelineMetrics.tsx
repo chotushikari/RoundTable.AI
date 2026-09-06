@@ -30,9 +30,9 @@ export function QuickstartPipelineMetrics({
   }
 
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-2">
-      <span className="text-sm font-medium leading-6 text-muted-foreground">
-        Pipeline
+    <div className="flex min-w-0 flex-wrap items-center justify-center gap-2">
+      <span className="font-mono text-[9px] font-medium uppercase tracking-wider text-[#666]">
+        Voice pipeline
       </span>
       {PIPELINE.map((step, index) => {
         const metric = step.metricTypes
@@ -42,11 +42,9 @@ export function QuickstartPipelineMetrics({
         return (
           <div key={step.key} className="flex items-center gap-2">
             {index > 0 && (
-              <span className="text-xs text-muted-foreground" aria-hidden="true">
-                /
-              </span>
+              <span className="text-[9px] text-[#444]" aria-hidden="true">·</span>
             )}
-            <span className="rounded-md border border-border bg-transparent px-2 py-0.5 text-xs font-semibold leading-4 text-foreground shadow-sm">
+            <span className="rounded-full border border-[#2e2e2e] bg-[#171717] px-2.5 py-1 font-mono text-[9px] font-medium leading-4 text-[#888]">
               {step.label}
               {metric && (
                 <span

@@ -14,7 +14,14 @@ import { legacyDemoEnabled } from '@/lib/legacy-demo';
 
 // System prompt that defines the agent's personality and behavior.
 // Swap this out to change what the agent talks about.
-const ADA_PROMPT = `You are **Ada**, an agentic developer advocate from **Agora**. You help developers understand and build with Agora's Conversational AI platform.
+const ADA_PROMPT = `You are **RoundTable**, a concise AI interviewer in a one-question public voice demo powered by Agora Conversational AI.
+
+# One-question demo contract
+- The greeting already asks the only interview question.
+- Listen to the visitor's answer, then respond once with one specific observation grounded in what they said.
+- Thank them and end with: "That completes the sample."
+- Never ask a follow-up question. If they speak again, remind them that the sample is complete.
+- Do not score, rank, or make a hiring recommendation.
 
 # What Agora Actually Is
 Agora is a real-time communications company. The product you represent is the **Agora Conversational AI Engine** — it lets developers add voice AI agents to any app by connecting ASR, LLM, and TTS into a real-time pipeline over Agora's SD-RTN (Software Defined Real-Time Network). Key facts:
@@ -37,10 +44,15 @@ If you don't know a specific fact about Agora, say so plainly and suggest checki
 - **Never list or enumerate**: No bullet points, no numbered steps. Say the single most important thing.
 - **Clarify before answering**: For anything complex, ask one focused question first.
 - **Ask at most one question per turn**: Never stack questions.
-- **Guide, don't lecture**: Unlock the next step, not everything at once.`;
+- **Guide, don't lecture**: Unlock the next step, not everything at once.
+
+For this homepage sample, the one-question demo contract overrides every general behavior above. Do not introduce yourself as Ada, do not discuss Agora product details unless directly asked, and do not ask a second interview question.`;
 
 // First thing the agent says when a user joins the channel.
-const GREETING = `Hi there! I'm Ada, your virtual assistant from Agora. How can I help?`;
+const GREETING = `Hi, I am a RoundTable AI interviewer. Tell me about something you built or learned recently.`;
+
+const COMPANION_PROMPT = `You are the RoundTable AI homepage companion. Your greeting is the complete experience. If the visitor speaks afterward, answer briefly and naturally about RoundTable AI or Agora Conversational AI. Never conduct an interview, score anyone, or make employment decisions.`;
+const COMPANION_GREETING = `I was built for the interview platform by Team LegionSquad, and I am powered by the Agora Conversational AI Engine.`;
 
 // agentUid identifies the AI in the RTC channel and shares its default with the client.
 const agentUid = String(DEFAULT_AGENT_UID);
@@ -57,7 +69,10 @@ export async function POST(request: NextRequest) {
     // --- 1. Parse request ---
 
     const body: ClientStartRequest = await request.json();
-    const { requester_id, channel_name } = body;
+    const { requester_id, channel_name, experience = 'interview' } = body;
+    const isCompanion = experience === 'companion';
+    const instructions = isCompanion ? COMPANION_PROMPT : ADA_PROMPT;
+    const greeting = isCompanion ? COMPANION_GREETING : GREETING;
 
     // Validate required env vars on first request so misconfiguration surfaces
     // with a clear error message rather than a silent failure.
@@ -85,8 +100,8 @@ export async function POST(request: NextRequest) {
     // Omit vendor API keys for supported models — AgentKit infers reseller presets on start (see Agora Console / billing).
     const agent = new Agent({
       client,
-      instructions: ADA_PROMPT,
-      greeting: GREETING,
+      instructions,
+      greeting,
       failureMessage: 'Please wait a moment.',
       maxHistory: 50,
       // VAD controls how the agent detects the start and end of a user's turn.
@@ -138,7 +153,7 @@ export async function POST(request: NextRequest) {
       .withLlm(
         new OpenAI({
           model: 'gpt-4o-mini',
-          greetingMessage: GREETING,
+          greetingMessage: greeting,
           failureMessage: 'Please wait a moment.',
           maxHistory: 15,
           params: {
@@ -179,7 +194,7 @@ export async function POST(request: NextRequest) {
       channel: channel_name,
       agentUid,
       remoteUids: [requester_id],
-      idleTimeout: 30,
+      idleTimeout: isCompanion ? 15 : 20,
       expiresIn: ExpiresIn.hours(1),
       debug: false, // enable debug to show restful API calls in the console
     });

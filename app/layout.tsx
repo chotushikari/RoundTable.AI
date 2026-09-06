@@ -1,5 +1,10 @@
 import type { Metadata, Viewport } from 'next';
+import '@fontsource/manrope/400.css';
+import '@fontsource/manrope/500.css';
+import '@fontsource/manrope/600.css';
+import '@fontsource/ibm-plex-mono/500.css';
 import './globals.css';
+import '@excalidraw/excalidraw/index.css';
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -8,9 +13,8 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: 'Talk to your voice agent | Agora',
-  description:
-    "Next.js quickstart: real-time voice agent with live transcript, streaming audio, and low latency from Agora's Conversational AI Engine—API routes in one repo.",
+  title: 'RoundTable AI | Adaptive voice interviews',
+  description: 'Adaptive, multi-role voice interviews powered by Agora Conversational AI.',
   icons: {
     icon: [
       { url: '/favicon.ico' },

@@ -17,6 +17,7 @@ export interface AgoraTokenData {
 export interface ClientStartRequest {
   requester_id: string;
   channel_name: string;
+  experience?: 'interview' | 'companion';
 }
 
 export interface StopConversationRequest {
@@ -39,4 +40,6 @@ export interface ConversationComponentProps {
   rtmClient: RTMClient;
   onTokenWillExpire: (uid: string) => Promise<AgoraRenewalTokens>;
   onEndConversation: () => void;
+  compactDemo?: boolean;
+  companionDemo?: boolean;
 }

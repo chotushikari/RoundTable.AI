@@ -33,7 +33,12 @@ The sections below (Start Here, Patterns, Anti-Patterns, etc.) remain the canoni
 - Product APIs: company interviews, signed invitations, sessions, artifacts, assessment release, MCP, and Agora webhooks live in `app/api`
 - Voice pipeline: Agora-managed STT/TTS with an authenticated RoundTable custom LLM/controller endpoint
 - Persistence and auth: Supabase in production; process-local memory is development/test fallback only
-- Workspaces: Monaco code and React Flow canvas checkpoints; server-selected E2B execution
+- Workspaces: Monaco code and one Excalidraw canvas with private checkpoints; server-selected E2B execution
+- Presentation: a browser-rendered role-aware AI avatar follows the server-owned active panel role and agent state; it does not create a video stream or another agent.
+- Public presentation: the homepage is a continuously interpolated, looping Three.js/Anime.js narrative with Manrope and IBM Plex Mono typography, a shadcn voice work surface, a one-question Agora interview sample, and a separate bounded Agora companion greeting. Production must opt in with `ENABLE_HOMEPAGE_VOICE_DEMO=true`.
+- Candidate presentation: invitation, consent, live interview, workspace, completion, and loading states share the Supabase-dark visual system. Keep server-owned progression internal rather than rendering a speculative role-answer counter.
+- Resume ownership: recruiters may attach optional plain-text resume content immediately before publishing an invitation. The public candidate consent screen does not accept resume uploads. Resume claims remain untrusted question seeds and never become evidence.
+- Optional camera interaction: a candidate-consented short clip is reviewed only for the prompted interaction; no raw media is persisted and it is never identity, voice-authenticity, deception, or hiring inference.
 
 ## Supported Modes
 
@@ -65,9 +70,11 @@ The sections below (Start Here, Patterns, Anti-Patterns, etc.) remain the canoni
 - `app/api/interviews/`: company definition, plan, version, publication, and status routes.
 - `app/api/invitations/`: public invitation preview and consent-gated guest session bootstrap.
 - `app/api/sessions/`: authenticated lifecycle, background agent start, event, artifact, tool, results, and release routes.
+- `app/api/sessions/[id]/report`: company-only normalized report for a completed interview.
 - `app/api/mcp/[grant]/route.ts`: session-scoped Streamable HTTP workspace tools.
 - `app/api/webhooks/agora/route.ts`: signed lifecycle reconciliation and finalization.
 - `components/LandingPage.tsx`: session bootstrap, RTM setup, provider wiring, and conversation lifecycle.
+- `components/RoundTableExperience.tsx`: public pinned-scroll landing narrative, Three.js artifact, five-role transformation, compact voice sample, and cursor-aware companion.
 - `components/ConversationComponent.tsx`: RTC join, mic publication, `AgoraVoiceAI` init, transcript state, and renewals.
 - `components/QuickstartConversationLayout.tsx`: in-call header, transcript rail, and controls dock.
 - `components/QuickstartPipelineMetrics.tsx`: per-stage latency chips from `AGENT_METRICS`.
@@ -76,7 +83,8 @@ The sections below (Start Here, Patterns, Anti-Patterns, etc.) remain the canoni
 - `lib/agora-server.ts`: combined RTC/RTM token generation and managed interview-agent lifecycle.
 - `lib/interview-controller.ts`: all-role evidence evaluation and deterministic next-speaker rules.
 - `lib/interview-store.ts`: Supabase persistence with development/test memory fallback.
-- `lib/assessment.ts`: structured evidence-only final assessment.
+- `lib/assessment.ts`: structured evidence-only final assessment that associates accepted answers with the preceding interviewer role, excludes navigation/control speech, and combines validated transcript quotes with conservative completed-workspace artifact-version evidence.
+- `lib/company-report.ts`: allow-listed company dashboard report projection.
 - `lib/conversation.ts`: transcript normalization and visualizer state mapping.
 - `env.local.example`: local environment template.
 - `scripts/verify-api-contracts.ts`: route contract verification.
@@ -190,11 +198,16 @@ npm run build
 - Do not restore browser-owned candidate scores, role selection, or prompt updates; authoritative interview state is server-owned and versioned.
 - Do not accept caller-supplied system prompts or model IDs at the custom LLM boundary.
 - Do not publish transcript, answers, artifacts, scores, or assessment tables through Realtime; publish only `company_session_status`.
+- Do not expose raw session events, controller cache, raw workspace source, raw media, credentials, or incomplete interview evidence through the company report; it is available only after completion and organization authorization.
 - Do not use resume claims as evidence. Resume text may only seed verification questions.
 - Do not emit automatic hire/reject decisions; every final assessment must keep `humanReviewRequired: true`.
+- Final role views must associate each accepted candidate answer with the preceding interviewer question (the opening demo answer belongs to Hiring Manager), exclude conversation/workspace controls, and use specific evidence-linked summaries. Do not duplicate one artifact as multiple headline strengths or overstate structural workspace inspection as exhaustive correctness.
+- Do not score autosaved workspace drafts merely because they exist. Only completed demo workspace tasks or deliberate checkpoints may contribute artifact evidence, and every such claim must reference an immutable `artifact_versions.id` without asserting exhaustive correctness.
 - Keep introduction, background, panel, and wrap-up phase ownership on the server; pause/repeat utterances must not advance assessment state.
+- Do not use the optional camera interaction result to identify a person, classify voice authenticity, infer deception or personal traits, affect evidence/score, or make an employment decision. Store no raw camera media.
 - Demo progression requires a matching completed-question transport receipt. Group answer fragments by server-owned pending question; incomplete phrases and introduction-only replies must not advance coverage. Reserve one accepted answer per question atomically, including in the local memory store. Keep the demo silence window at 1500 ms and preserve the fast start-of-speech interruption threshold.
-- New showcases use explicit `demoMode`, frozen with the published definition, with all five roles and a five-minute maximum. Combine introduction/background in the Hiring Manager greeting, then Technical, Product Manager, Customer, and Behavioural. Finish after five substantive answers and the spoken closing; pause/repeat/readiness controls must not count. Candidate progress counts answered roles, not generated questions. Existing two-minute invitations retain their legacy policy; normal interviews retain adaptive priorities.
+- Workspace modality is selected from server-owned questions/scenarios. Keep the editor/canvas mounted when minimized, preserve audio controls, and respect reduced motion. Canvas is one embedded Excalidraw surface stored in a private canvas artifact. Candidate workspace review inspects only the requested saved artifact without executing it or claiming live screen access; an empty canvas is stated plainly. A complete Client/API Server/Database demo diagram with at least two arrows advances automatically. Evaluators use deliberate checkpoints, while candidate-requested workspace review may inspect the latest autosave.
+- New showcases use explicit `demoMode`, frozen with the published definition, with all five roles and a ten-minute maximum for new dashboard interviews. Combine introduction/background in the Hiring Manager greeting, then Technical, Product Manager, Customer, and Behavioural. Finish after five substantive answers and the spoken closing; pause/repeat/readiness controls must not count. Candidate progress counts answered roles, not generated questions. Existing invitations retain their duration and sequence; normal interviews retain adaptive priorities. Demos with at least ten minutes assign code to Technical and canvas to Product. Default to intern tasks accepting coursework. Save selected Python/JavaScript/TypeScript language in checkpoints. Workspace acknowledgements describe only saved artifacts; E2B reports selected test-case outcomes, not a blanket correctness claim.
 
 ## Done Criteria
 

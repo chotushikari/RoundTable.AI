@@ -28,6 +28,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
       durationMinutes: version.definition.durationMinutes,
       demoMode: version.definition.demoMode ?? false,
       panelRoles: version.definition.panelRoles,
+      candidateName: invitation.candidateName,
       expiresAt: invitation.expiresAt,
       alreadyUsed: Boolean(invitation.claimedAt),
       existingSession,

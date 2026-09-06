@@ -5,7 +5,6 @@ import { createAgoraChannel, createAgoraRtcUid, createAgoraToken } from '@/lib/a
 import { apiError } from '@/lib/http';
 import { interviewStore } from '@/lib/interview-store';
 import { candidateCookieName, createCandidateGrant, createOpaqueToken, hashToken } from '@/lib/security';
-import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import type { CompetencyState, InterviewSessionRecord } from '@/types/interview';
 import { DEFAULT_AGENT_UID } from '@/lib/agora';
 import { DEMO_OPENING_QUESTION, demoRoles } from '@/lib/interview-demo';
@@ -13,12 +12,17 @@ import { DEMO_OPENING_QUESTION, demoRoles } from '@/lib/interview-demo';
 const StartSchema = z.object({
   consent: z.literal(true),
   candidateName: z.string().trim().min(1).max(160).optional(),
-  resumeText: z.string().max(30_000).optional(),
 });
 
 export async function POST(request: Request, { params }: { params: Promise<{ token: string }> }) {
   try {
-    const body = StartSchema.parse(await request.json());
+    let rawBody: unknown;
+    try {
+      rawBody = await request.json();
+    } catch {
+      throw new Error('Interview consent is required. Refresh the invitation and start again.');
+    }
+    const body = StartSchema.parse(rawBody);
     const { token } = await params;
     let invitation = await interviewStore.getInvitationByTokenHash(hashToken(token));
     if (!invitation || invitation.revokedAt) throw new Error('Invitation not found or revoked');
@@ -27,18 +31,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     const version = await interviewStore.getInterviewVersion(invitation.interviewVersionId);
     if (!version) throw new Error('Interview version not found');
 
-    if (body.resumeText?.trim()) {
-      const admin = getSupabaseAdmin();
-      if (admin) {
-        const path = `${invitation.organizationId}/${invitation.id}/resume.txt`;
-        const { error } = await admin.storage.from('candidate-resumes').upload(
-          path,
-          new Blob([body.resumeText], { type: 'text/plain;charset=utf-8' }),
-          { upsert: false },
-        );
-        if (error) throw new Error(`Resume upload failed: ${error.message}`);
-        invitation = await interviewStore.setInvitationResumePath(invitation.id, path);
-      }
+    if (body.candidateName && body.candidateName !== invitation.candidateName) {
+      invitation = await interviewStore.setInvitationCandidateName(invitation.id, body.candidateName);
     }
 
     const id = randomUUID();
@@ -92,7 +86,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     await interviewStore.createSession(invitation, sessionInput);
     await interviewStore.appendEvent(id, 'session.created', {
       consent: true,
-      resumeProvided: Boolean(body.resumeText),
+      resumeProvided: Boolean(invitation.resumePath),
       candidateNameProvided: Boolean(body.candidateName),
     }).catch((eventError) => console.error('[session] failed to append creation event', eventError));
     const interviewEndsAt = new Date(Date.parse(startedAt) + version.definition.durationMinutes * 60_000).toISOString();

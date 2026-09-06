@@ -3,6 +3,16 @@ import { z } from 'zod';
 import { requireCandidateSession } from '@/lib/api-auth';
 import { apiError } from '@/lib/http';
 import { executeWorkspaceTool } from '@/lib/workspace-tools';
+import { interviewStore } from '@/lib/interview-store';
+
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await params;
+    await requireCandidateSession(request, id);
+    const runs = await interviewStore.listToolRuns(id);
+    return NextResponse.json({ run: runs.filter((run) => run.name === 'run_code_tests').at(-1) ?? null });
+  } catch (error) { return apiError(error, 'Failed to load test result'); }
+}
 
 const ToolSchema = z.object({
   name: z.literal('run_code_tests'),

@@ -5,7 +5,8 @@ import { buildFallbackPlan } from '@/lib/interview-planner';
 import { interviewStore, resetMemoryStoreForTests } from '@/lib/interview-store';
 import type { InterviewSessionRecord } from '@/types/interview';
 import { answeredDemoRoles, DEMO_CLOSING, DEMO_OPENING_QUESTION, DEMO_ROLES } from '@/lib/interview-demo';
-import { demoQuestion, processDemoAnswer, mergeAnswerFragments, isIncompleteDemoAnswer } from '@/lib/demo-turns';
+import { advanceDemoWorkspace, demoQuestion, processDemoAnswer, mergeAnswerFragments, isIncompleteDemoAnswer } from '@/lib/demo-turns';
+import { respondToWorkspaceCommand } from '@/lib/workspace-conversation';
 import { POST as recordSessionEvent } from '@/app/api/sessions/[id]/events/route';
 import { candidateCookieName, createCandidateGrant } from '@/lib/security';
 
@@ -215,6 +216,96 @@ test('demo fragments merge cumulative ASR text and explicit short answers can fi
   assert.equal(mergeAnswerFragments(['I built a cache', 'I built a cache for checkout', 'for checkout']), 'I built a cache for checkout');
   assert.equal(isIncompleteDemoAnswer('that', 'behavioral'), true);
   assert.equal(isIncompleteDemoAnswer("I don't know.", 'technical'), false);
+  assert.equal(isIncompleteDemoAnswer('Please continue.', 'technical'), false);
+  assert.equal(isIncompleteDemoAnswer('Next question.', 'technical'), false);
   assert.equal(isIncompleteDemoAnswer("I used Redis. That's my answer.", 'technical'), false);
   assert.equal(isIncompleteDemoAnswer('I skipped the cache because latency was high and', 'technical'), true);
+});
+
+test('an explicit workspace continue advances without creating a candidate answer', async () => {
+  resetMemoryStoreForTests();
+  delete process.env.GROQ_API_KEY;
+  const organizationId = crypto.randomUUID();
+  const interview = await interviewStore.createInterview(organizationId, {
+    title: 'Workspace skip', roleTitle: 'Intern', jdText: 'Build a small application.',
+    desiredOutcomes: ['Explain work'], panelRoles: DEMO_ROLES, mustAskQuestions: [], mustCoverTopics: [],
+    durationMinutes: 10, demoMode: true, instructions: '',
+  });
+  const planned = await interviewStore.setInterviewPlan(interview.id, organizationId, buildFallbackPlan(interview));
+  const version = await interviewStore.createInterviewVersion(planned);
+  const invitation = await interviewStore.createInvitation({
+    id: crypto.randomUUID(), interviewId: interview.id, interviewVersionId: version.id, organizationId,
+    tokenHash: 'w'.repeat(64), expiresAt: new Date(Date.now() + 60_000).toISOString(), revokedAt: null,
+    claimedAt: null, candidateName: null, candidateEmail: null, resumePath: null, createdAt: new Date().toISOString(),
+  });
+  const session: InterviewSessionRecord = {
+    id: crypto.randomUUID(), invitationId: invitation.id, interviewId: interview.id, interviewVersionId: version.id,
+    organizationId, status: 'in_progress', connectionHealth: 'connected', channelName: 'workspace-skip', rtcUid: '2004',
+    agentUid: '123456', agoraAgentId: 'agent', llmTokenHash: 's'.repeat(64), activeRole: 'technical', previousRole: 'hiring_manager',
+    consecutiveRoleTurns: 1, currentModality: 'code', phase: 'panel', competencyState: {}, askedMustAsk: [], coveredTopics: [],
+    pendingQuestion: 'Technical interviewer here. Write a small function.', stateVersion: 0, toolRunCount: 0,
+    startedAt: new Date().toISOString(), completedAt: null, expiresAt: new Date(Date.now() + 60_000).toISOString(),
+  };
+  await interviewStore.createSession(invitation, session);
+  // The previous Hiring Manager answer made Technical the pending role.
+  const previous = await interviewStore.createTurn({
+    sessionId: session.id, speaker: 'candidate', speakerRole: null, text: 'I built a class assignment.', status: 'final', dedupeKey: 'prior',
+  });
+  await interviewStore.createAnalysis({
+    id: crypto.randomUUID(), sessionId: session.id, turnId: previous.id, analysis: {
+      roleFindings: DEMO_ROLES.map((role) => ({ role, observations: [], strengths: [], gaps: [] })), competencyEvidence: [], vague: false,
+      vagueReason: '', contradictions: [], recommendedDifficultyDelta: 0, recommendedRole: 'technical', recommendedObjective: '', recommendedModality: 'code', addressedTopics: [], toolRequest: null,
+    }, decision: { activeSpeakerRole: 'technical', objective: 'Write code', modality: 'code', difficulty: 3, reasonCode: 'panel_coverage', remainingCoverage: [], roleHandoff: true },
+    responseText: session.pendingQuestion!, model: 'test', createdAt: new Date().toISOString(),
+  });
+  const response = await advanceDemoWorkspace({ session, upstreamTurnId: 'skip', outcome: 'skipped' });
+  assert.match(response, /Product manager here/);
+  assert.equal((await interviewStore.getSession(session.id))?.activeRole, 'product');
+  assert.equal((await interviewStore.listTurns(session.id)).filter((turn) => turn.speaker === 'candidate').length, 1);
+  assert.equal((await interviewStore.listAnalyses(session.id)).length, 1);
+});
+
+test('a completed autosaved workspace review gives feedback and advances without a second continue', async () => {
+  resetMemoryStoreForTests();
+  delete process.env.GROQ_API_KEY;
+  const organizationId = crypto.randomUUID();
+  const interview = await interviewStore.createInterview(organizationId, {
+    title: 'Workspace review', roleTitle: 'Intern', jdText: 'Build a small application.',
+    desiredOutcomes: ['Explain work'], panelRoles: DEMO_ROLES, mustAskQuestions: [], mustCoverTopics: [],
+    durationMinutes: 10, demoMode: true, instructions: '',
+  });
+  const planned = await interviewStore.setInterviewPlan(interview.id, organizationId, buildFallbackPlan(interview));
+  const version = await interviewStore.createInterviewVersion(planned);
+  const invitation = await interviewStore.createInvitation({
+    id: crypto.randomUUID(), interviewId: interview.id, interviewVersionId: version.id, organizationId,
+    tokenHash: 'x'.repeat(64), expiresAt: new Date(Date.now() + 60_000).toISOString(), revokedAt: null,
+    claimedAt: null, candidateName: null, candidateEmail: null, resumePath: null, createdAt: new Date().toISOString(),
+  });
+  const session: InterviewSessionRecord = {
+    id: crypto.randomUUID(), invitationId: invitation.id, interviewId: interview.id, interviewVersionId: version.id,
+    organizationId, status: 'in_progress', connectionHealth: 'connected', channelName: 'workspace-review', rtcUid: '2005',
+    agentUid: '123456', agoraAgentId: 'agent', llmTokenHash: 't'.repeat(64), activeRole: 'technical', previousRole: 'hiring_manager',
+    consecutiveRoleTurns: 1, currentModality: 'code', phase: 'panel', competencyState: {}, askedMustAsk: [], coveredTopics: [],
+    pendingQuestion: 'Implement a function that takes a list of integers and returns the list sorted in ascending order.', stateVersion: 0, toolRunCount: 0,
+    startedAt: new Date().toISOString(), completedAt: null, expiresAt: new Date(Date.now() + 60_000).toISOString(),
+  };
+  await interviewStore.createSession(invitation, session);
+  const previous = await interviewStore.createTurn({ sessionId: session.id, speaker: 'candidate', speakerRole: null, text: 'I built a class assignment.', status: 'final', dedupeKey: 'prior' });
+  await interviewStore.createAnalysis({
+    id: crypto.randomUUID(), sessionId: session.id, turnId: previous.id, analysis: {
+      roleFindings: DEMO_ROLES.map((role) => ({ role, observations: [], strengths: [], gaps: [] })), competencyEvidence: [], vague: false,
+      vagueReason: '', contradictions: [], recommendedDifficultyDelta: 0, recommendedRole: 'technical', recommendedObjective: '', recommendedModality: 'code', addressedTopics: [], toolRequest: null,
+    }, decision: { activeSpeakerRole: 'technical', objective: 'Write code', modality: 'code', difficulty: 3, reasonCode: 'panel_coverage', remainingCoverage: [], roleHandoff: true }, responseText: session.pendingQuestion!, model: 'test', createdAt: new Date().toISOString(),
+  });
+  await interviewStore.saveArtifact(session.id, 'code', { language: 'python', source: 'def sort_ascending(values):\n    return sorted(values)' }, 0);
+  const savedVersion = await interviewStore.getLatestArtifactVersion(session.id, 'code');
+  assert.equal(savedVersion?.version, 1);
+  assert.match(String((savedVersion?.content as { source?: string })?.source), /sort_ascending/);
+  const response = await respondToWorkspaceCommand(session, 'review', 'autosave-review', 'Updated.');
+  assert.match(response, /ascending sort/);
+  assert.match(response, /Let’s move to the next panel perspective/);
+  assert.match(response, /Product manager here/);
+  assert.equal((await interviewStore.getSession(session.id))?.activeRole, 'product');
+  const completionEvent = (await interviewStore.listEvents(session.id)).find((event) => event.type === 'demo.workspace_completed');
+  assert.equal(completionEvent?.payload.artifactVersionId, savedVersion?.id);
 });

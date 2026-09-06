@@ -8,6 +8,59 @@ import {
   validateEvidence,
 } from '@/lib/interview-controller';
 import { buildFallbackPlan } from '@/lib/interview-planner';
+import { demoWorkspaceQuestion, questionWorkspace } from '@/lib/workspace-policy';
+import { workspaceCommand, workspaceHelpText } from '@/lib/workspace-conversation';
+import { checkpointObservation } from '@/lib/workspace-observation';
+
+test('workspace selection follows required tasks and voice actions are not scored answers', () => {
+  assert.equal(questionWorkspace('Explain your customer impact'), null);
+  assert.equal(questionWorkspace('Implement a TypeScript function to deduplicate requests'), 'code');
+  assert.equal(questionWorkspace('Sketch the architecture and explain failures'), 'canvas');
+  const codeInterview = { ...interview, mustAskQuestions: ['Write a function to deduplicate request IDs'] };
+  assert.equal(demoWorkspaceQuestion(codeInterview, plan)?.modality, 'code');
+  assert.equal(demoWorkspaceQuestion(interview, plan)?.modality, 'canvas');
+  assert.equal(demoWorkspaceQuestion(interview, { ...plan, scenarios: [] }), null);
+  assert.equal(workspaceCommand('Please open the canvas'), 'canvas');
+  assert.equal(workspaceCommand('Run the tests'), 'tests');
+  assert.equal(workspaceCommand('Review my diagram'), 'review');
+  assert.equal(workspaceCommand('Now see it'), 'review');
+  assert.equal(workspaceCommand('I ran tests because correctness matters'), null);
+});
+
+test('extended intern demo includes coding and canvas without dropping panel roles', () => {
+  const intern = { ...interview, demoMode: true, durationMinutes: 10, roleTitle: 'Software Engineer Intern (0 years)', panelRoles: ['hiring_manager', 'technical', 'product', 'customer', 'behavioral'] as PanelRole[] };
+  const internPlan = buildFallbackPlan(intern);
+  const prior: TurnAnalysisRecord[] = [];
+  for (const [index, role] of intern.panelRoles.entries()) {
+    const result = chooseNextDecision({ session: session({ activeRole: role }), interview: intern, plan: internPlan, analysis: analysis(), priorAnalyses: prior });
+    if (index === 0) { assert.equal(result.modality, 'code'); assert.match(result.objective, /even numbers/); assert.match(result.objective, /Python/); }
+    if (index === 1) { assert.equal(result.modality, 'canvas'); assert.match(result.objective, /to-do app/); }
+    if (index < 4) assert.equal(result.activeSpeakerRole, intern.panelRoles[index + 1]);
+    else assert.equal(result.reasonCode, 'wrap_up');
+    prior.push({ ...priorRole(result.activeSpeakerRole), decision: result });
+  }
+  assert.equal(demoWorkspaceQuestion(intern, { ...internPlan, scenarios: [] }, 'code')?.modality, 'code');
+});
+
+test('workspace acknowledgements describe autosaved or shared work, never correctness', () => {
+  assert.match(checkpointObservation({ source: 'draft' }, 'code')!, /autosaved code/);
+  assert.match(checkpointObservation({ checkpoint: { source: 'def solution(x):\n    return x', language: 'python' } }, 'code')!, /python.*2 non-empty lines/);
+  assert.match(checkpointObservation({ checkpoint: { nodes: [{}, {}], edges: [{}] } }, 'canvas')!, /2 components and 1 connections/);
+  assert.equal(workspaceCommand('Can you see my code?'), 'review');
+  assert.equal(workspaceCommand('I have shared my checkpoint'), 'review');
+  assert.equal(workspaceCommand('Review now, please.'), 'review');
+  assert.equal(workspaceCommand('Updated.'), 'review');
+  assert.equal(workspaceCommand('See now.'), 'review');
+  assert.equal(workspaceCommand('Can I implement it in Python instead?'), 'help');
+  assert.equal(workspaceCommand('How should I implement that design? Give me a hint.'), 'help');
+});
+
+test('workspace help is grounded in the active task and never scores an answer', () => {
+  assert.match(workspaceHelpText(session({ currentModality: 'code', pendingQuestion: 'Implement countVowels in JavaScript.' }), 'Can I implement it in Python instead?'), /Of course.*Python/i);
+  assert.match(workspaceHelpText(session({ currentModality: 'code', pendingQuestion: 'Implement countVowels in JavaScript.' }), 'I understood.'), /Take your time/);
+  assert.match(workspaceHelpText(session({ currentModality: 'code', pendingQuestion: 'Implement countVowels in JavaScript.' }), 'Give me a hint.'), /lowercase.*a, e, i, o, or u/i);
+  assert.match(workspaceHelpText(session({ currentModality: 'canvas', pendingQuestion: 'Draw an architecture.' }), 'How should I draw this?'), /Client, API Server, and Database/);
+});
 import type { InterviewDefinitionRecord, InterviewSessionRecord, PanelRole, PanelTurnAnalysis, TurnAnalysisRecord } from '@/types/interview';
 
 const interview: InterviewDefinitionRecord = {
@@ -225,6 +278,24 @@ test('two-minute demo rotates through every configured panel role', () => {
   });
   assert.equal(afterCustomer.activeSpeakerRole, 'behavioral');
   assert.equal(afterCustomer.reasonCode, 'panel_coverage');
+});
+
+test('workspace handoffs retain prior roles so the last panel turn wraps instead of repeating Customer', () => {
+  const demoInterview = {
+    ...interview,
+    demoMode: true,
+    durationMinutes: 10,
+    panelRoles: ['hiring_manager', 'technical', 'product', 'customer', 'behavioral'] as PanelRole[],
+  };
+  const result = chooseNextDecision({
+    session: session({ activeRole: 'behavioral', previousRole: 'customer', currentModality: 'voice' }),
+    interview: demoInterview,
+    plan,
+    priorAnalyses: [priorRole('technical'), priorRole('behavioral')],
+    completedWorkspaceRoles: ['technical', 'product'],
+    analysis: analysis(),
+  });
+  assert.equal(result.reasonCode, 'wrap_up');
 });
 
 test('two-minute role prompts are short and include product impact and customer role-play', () => {

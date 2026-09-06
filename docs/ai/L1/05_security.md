@@ -2,4 +2,11 @@
 
 Company APIs validate Supabase bearer tokens and organization membership. Candidate APIs validate an HttpOnly, SameSite=Strict signed cookie. The custom LLM uses a random token whose SHA-256 hash is stored. MCP URLs contain an expiring signed session grant.
 
-The custom LLM ignores caller-provided system messages and model names. Employer, resume, and transcript content are untrusted data. Only literal transcript quotes survive evidence validation. E2B receives no process environment or app secrets, accepts only JS/TS checkpoints, runs a fixed command for 15 seconds, caps output, and permits at most five tool runs.
+The custom LLM ignores caller-provided system messages and model names. Employer, resume, and transcript content are untrusted data. Only literal transcript quotes survive evidence validation. E2B receives no process environment or app secrets, accepts only Python/JavaScript/TypeScript checkpoints, runs a fixed command for 15 seconds, caps output, and permits at most five tool runs.
+
+The optional camera interaction check requires a visible candidate consent action before camera access. Its Gemini key is server-only. Raw clips are used only for the immediate request and never stored, broadcast, scored, or included in assessment evidence. The result may only communicate whether the prompted interaction was observed, inconclusive, or unavailable; it must never identify a person, determine whether a voice is synthetic, allege deception, infer sensitive traits, or influence an employment decision.
+
+Company reports require organization membership and are available only after completion. The report is an allow-listed projection rather than a database dump: it excludes controller cache, session events, credentials, raw media, and raw workspace content. All assessment claims remain transcript- or artifact-evidence-linked and retain `humanReviewRequired: true`.
+
+
+The homepage voice sample is intentionally bounded and disabled in production unless `ENABLE_HOMEPAGE_VOICE_DEMO=true`. Its agent prompt is server-owned, asks one question, produces one observation, makes no hiring decision, and uses a short idle timeout. It does not create an interview session or persist assessment evidence.

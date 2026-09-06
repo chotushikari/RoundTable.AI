@@ -4,16 +4,21 @@ import { z } from 'zod';
 import { apiError } from '@/lib/http';
 import { interviewStore } from '@/lib/interview-store';
 import { createOpaqueToken, hashToken } from '@/lib/security';
-import { requireCompanyContext } from '@/lib/supabase-admin';
+import { getSupabaseAdmin, requireCompanyContext } from '@/lib/supabase-admin';
 
 const PublishSchema = z.object({
   candidateName: z.string().trim().min(1).max(160).nullable().optional(),
   candidateEmail: z.string().trim().email().max(320).nullable().optional(),
+  resumeText: z.string().max(30_000).optional(),
   expiresInDays: z.number().int().min(1).max(7).default(7),
 });
 
 function applicationBaseUrl(request: Request): string {
-  return (process.env.APP_BASE_URL ?? new URL(request.url).origin).replace(/\/$/, '');
+  const vercelUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.VERCEL_URL;
+  const configured = process.env.NODE_ENV === 'production' && vercelUrl
+    ? vercelUrl
+    : process.env.APP_BASE_URL ?? new URL(request.url).origin;
+  return (configured.startsWith('http') ? configured : `https://${configured}`).replace(/\/$/, '');
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -27,7 +32,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const version = await interviewStore.createInterviewVersion(interview);
     const rawToken = createOpaqueToken();
     const createdAt = new Date().toISOString();
-    const invitation = await interviewStore.createInvitation({
+    let invitation = await interviewStore.createInvitation({
       id: randomUUID(),
       interviewId: interview.id,
       interviewVersionId: version.id,
@@ -41,6 +46,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       resumePath: null,
       createdAt,
     });
+    if (body.resumeText?.trim()) {
+      const admin = getSupabaseAdmin();
+      if (admin) {
+        const path = `${invitation.organizationId}/${invitation.id}/resume.txt`;
+        const { error } = await admin.storage.from('candidate-resumes').upload(
+          path,
+          new Blob([body.resumeText], { type: 'text/plain;charset=utf-8' }),
+          { upsert: false },
+        );
+        if (error) throw new Error(`Resume upload failed: ${error.message}`);
+        invitation = await interviewStore.setInvitationResumePath(invitation.id, path);
+      }
+    }
     return NextResponse.json({
       invitation: { ...invitation, tokenHash: undefined },
       invitationUrl: `${applicationBaseUrl(request)}/interview/${rawToken}`,
